@@ -1,2 +1,54 @@
-// For information on how to create your own theme, please see:
-// http://ionicframework.com/docs/theming/
+:root {
+  // Primary brand color
+  --ion-color-primary: #f878b5;
+  --ion-color-primary-rgb: 248, 120, 181;
+  --ion-color-primary-contrast: #ffffff;
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: #d96a9f;
+  --ion-color-primary-tint: #f986bc;
+
+  // Add any other global variables here
+}
+
+// Dark theme
+.dark {
+  --ion-background-color: #121212;
+  --ion-background-color-rgb: 18, 18, 18;
+  --ion-text-color: #ffffff;
+  --ion-text-color-rgb: 255, 255, 255;
+  --ion-border-color: #222222;
+
+  ion-content {
+    --background: #121212;
+  }
+
+  ion-item {
+    --background: #1e1e1e;
+    --color: white;
+  }
+
+  ion-item-divider {
+    --background: #121212;
+    --color: #bbbbbb;
+  }
+
+  .section h2, .song-info h3 {
+    color: white !important;
+  }
+
+  .song-info p, span {
+    color: #bbbbbb !important;
+  }
+
+  .playlist-card {
+    background: #1e1e1e !important;
+  }
+
+  .playlist-info h3 {
+    color: white !important;
+  }
+
+  .playlist-info p {
+    color: #bbbbbb !important;
+  }
+}

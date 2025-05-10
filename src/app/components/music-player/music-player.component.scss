@@ -1,0 +1,99 @@
+.player-header {
+  ion-toolbar {
+    --background: transparent;
+    --color: #333;
+  }
+}
+
+.player-content {
+  --background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px;
+
+  .album-artwork {
+    width: 280px;
+    height: 280px;
+    margin: 20px auto 40px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+  }
+
+  .song-details {
+    text-align: center;
+    margin-bottom: 40px;
+
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin: 0 0 10px;
+      color: #333;
+    }
+
+    p {
+      font-size: 16px;
+      color: #666;
+      margin: 0;
+    }
+  }
+
+  .player-controls {
+    width: 100%;
+
+    .progress-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 30px;
+
+      .progress-time {
+        font-size: 12px;
+        color: #999;
+        width: 45px;
+      }
+
+      ion-progress-bar {
+        --progress-background: linear-gradient(to right, #ff6b9b, #f878b5);
+        --buffer-background: #e0e0e0;
+        flex: 1;
+        margin: 0 10px;
+        height: 4px;
+      }
+    }
+
+    .control-buttons {
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+
+      ion-button {
+        --padding-start: 0;
+        --padding-end: 0;
+
+        ion-icon {
+          font-size: 24px;
+          color: #666;
+        }
+      }
+
+      .play-button {
+        width: 64px;
+        height: 64px;
+        --border-radius: 50%;
+        --background: linear-gradient(135deg, #ff6b9b, #f878b5);
+
+        ion-icon {
+          font-size: 32px;
+          color: white;
+        }
+      }
+    }
+  }
+}

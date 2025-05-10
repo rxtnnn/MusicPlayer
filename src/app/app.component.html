@@ -1,3 +1,19 @@
 <ion-app>
   <ion-router-outlet></ion-router-outlet>
+  <ion-tabs>
+    <ion-tab-bar slot="bottom">
+      <ion-tab-button tab="home">
+       <fa-icon [icon]="['fas', 'home']"></fa-icon>
+        <ion-label>Home</ion-label>
+      </ion-tab-button>
+      <ion-tab-button tab="playlist">
+        <fa-icon [icon]="['fas', 'list']"></fa-icon>
+        <ion-label>Playlists</ion-label>
+      </ion-tab-button>
+      <ion-tab-button tab="settings">
+        <fa-icon [icon]="['fas', 'cog']"></fa-icon>
+        <ion-label>Settings</ion-label>
+      </ion-tab-button>
+    </ion-tab-bar>
+  </ion-tabs>
 </ion-app>

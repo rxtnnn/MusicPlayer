@@ -1,20 +1,112 @@
-<ion-header [translucent]="true">
+<ion-header [translucent]="true" [class.dark-mode]="(isDarkMode | async)">
   <ion-toolbar>
     <ion-title>
-      Blank
+      <div class="app-title">Harmony</div>
     </ion-title>
+    <ion-buttons slot="end">
+      <ion-button>
+        <fa-icon [icon]="['fas', 'search']" size="lg"></fa-icon>
+      </ion-button>
+      <ion-button>
+        <fa-icon [icon]="['fas', 'microphone']" size="lg"></fa-icon>
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
-<ion-content [fullscreen]="true">
-  <ion-header collapse="condense">
-    <ion-toolbar>
-      <ion-title size="large">Blank</ion-title>
-    </ion-toolbar>
-  </ion-header>
+<ion-content [fullscreen]="true" [class.dark-mode]="(isDarkMode | async)">
+  <!-- Genre Selector -->
+  <div class="genre-scroll-container">
+    <div class="genre-item"
+         [class.active]="selectedGenre === 'all'"
+         (click)="selectGenre('all')">
+      All
+    </div>
+    <div *ngFor="let genre of genres"
+         class="genre-item"
+         [class.active]="selectedGenre === genre.id"
+         (click)="selectGenre(genre.id)">
+      {{genre.name}}
+    </div>
+  </div>
 
-  <div id="container">
-    <strong>Ready to create an app?</strong>
-    <p>Start with Ionic <a target="_blank" rel="noopener noreferrer" href="https://ionicframework.com/docs/components">UI Components</a></p>
+  <!-- Recent Releases Section -->
+  <div class="section-header">
+    <h2>New Releases</h2>
+    <ion-button fill="clear" size="small">See All</ion-button>
+  </div>
+
+  <div class="horizontal-scroll-container">
+    <div *ngFor="let track of newReleases" class="music-card" (click)="playTrack(track)">
+      <div class="album-art-container">
+      <img [src]="track.imageUrl || 'assets/default-album-art.png'" [alt]="track.title" class="album-art">
+        <div class="play-overlay">
+          <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+        </div>
+      </div>
+      <div class="track-info">
+        <h3 class="track-title">{{track.title}}</h3>
+        <p class="track-artist">{{track.artist}}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Featured Playlists -->
+  <div class="section-header">
+    <h2>Featured Playlists</h2>
+    <ion-button fill="clear" size="small">See All</ion-button>
+  </div>
+
+  <div class="horizontal-scroll-container">
+    <div *ngFor="let playlist of featuredPlaylists" class="playlist-card" (click)="playPlaylist(playlist.id)">
+      <div class="album-art-container">
+        <img [src]="playlist.images[0]?.url || 'assets/placeholder.png'" [alt]="playlist.name" class="album-art">
+        <div class="play-overlay">
+          <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+        </div>
+      </div>
+      <div class="playlist-info">
+        <h3 class="playlist-title">{{playlist.name}}</h3>
+        <p class="playlist-description">{{playlist.description}}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recommended Tracks -->
+  <div class="section-header">
+    <h2>Recommended For You</h2>
+    <ion-button fill="clear" size="small">See All</ion-button>
+  </div>
+
+  <div class="track-list">
+    <div *ngFor="let track of newReleases" class="track-item" (click)="playTrack(track)">
+      <div class="track-item-left">
+        <img [src]="track.imageUrl || 'assets/placeholder.png'" [alt]="track.title" class="track-thumbnail">
+        <div class="track-details">
+          <h3 class="track-item-title">{{track.title}}</h3>
+          <p class="track-item-artist">{{track.artist}}</p>
+        </div>
+      </div>
+      <div class="track-item-right">
+        <fa-icon [icon]="['fas', 'heart']" [ngClass]="{'liked': track.liked}"></fa-icon>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mini Player (if song is playing) -->
+  <div class="mini-player" *ngIf="(audioService.getCurrentTrack() | async) as currentTrack">
+    <div class="mini-player-left" [routerLink]="['/now-playing']">
+      <img [src]="currentTrack.imageUrl || 'assets/placeholder.png'" class="mini-player-thumbnail">
+      <div class="mini-player-info">
+        <h4 class="mini-player-title">{{currentTrack.title}}</h4>
+        <p class="mini-player-artist">{{currentTrack.artist}}</p>
+      </div>
+    </div>
+    <div class="mini-player-controls">
+      <fa-icon [icon]="['fas', 'step-backward']" (click)="audioService.previous()"></fa-icon>
+      <fa-icon [icon]="(audioService.getIsPlaying() | async) ? ['fas', 'pause'] : ['fas', 'play']"
+               (click)="audioService.togglePlay()"></fa-icon>
+      <fa-icon [icon]="['fas', 'step-forward']" (click)="audioService.next()"></fa-icon>
+    </div>
   </div>
 </ion-content>

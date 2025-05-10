@@ -1,0 +1,75 @@
+<ion-header [translucent]="true" [class.dark-mode]="isDarkMode">
+  <ion-toolbar>
+    <ion-title>
+      <div class="app-title">Settings</div>
+    </ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content [fullscreen]="true" [class.dark-mode]="isDarkMode">
+  <ion-list [class.dark-mode]="isDarkMode">
+    <!-- Appearance Section -->
+    <ion-list-header>
+      <ion-label>Appearance</ion-label>
+    </ion-list-header>
+
+    <ion-item>
+      <ion-label>Dark Mode</ion-label>
+      <ion-toggle [(ngModel)]="isDarkMode" (ionChange)="toggleDarkMode()"></ion-toggle>
+    </ion-item>
+
+    <!-- Audio Section -->
+    <ion-list-header>
+      <ion-label>Audio</ion-label>
+    </ion-list-header>
+
+    <ion-item>
+      <ion-label>Streaming Quality</ion-label>
+      <ion-select [(ngModel)]="streamingQuality" (ionChange)="setStreamingQuality($event.detail.value)">
+        <ion-select-option value="Low">Low</ion-select-option>
+        <ion-select-option value="Medium">Medium</ion-select-option>
+        <ion-select-option value="High">High</ion-select-option>
+      </ion-select>
+    </ion-item>
+
+    <ion-item>
+      <ion-label>Download Quality</ion-label>
+      <ion-select [(ngModel)]="downloadQuality" (ionChange)="setDownloadQuality($event.detail.value)">
+        <ion-select-option value="Low">Low</ion-select-option>
+        <ion-select-option value="Medium">Medium</ion-select-option>
+        <ion-select-option value="High">High</ion-select-option>
+      </ion-select>
+    </ion-item>
+
+    <ion-item button (click)="openEqualizer()">
+      <ion-label>Equalizer</ion-label>
+      <ion-note slot="end" color="primary">Customize</ion-note>
+    </ion-item>
+
+    <!-- Storage Section -->
+    <ion-list-header>
+      <ion-label>Storage</ion-label>
+    </ion-list-header>
+
+    <ion-item button (click)="clearCache()">
+      <ion-label>Clear Cache</ion-label>
+      <ion-note slot="end" color="primary">Clear</ion-note>
+    </ion-item>
+
+    <ion-item>
+      <ion-label>
+        <h2>Used Storage</h2>
+        <p>{{cacheSize}}</p>
+      </ion-label>
+    </ion-item>
+
+    <!-- Account Section -->
+    <ion-list-header>
+      <ion-label>Account</ion-label>
+    </ion-list-header>
+
+    <ion-item button (click)="signOut()">
+      <ion-label color="danger">Sign Out</ion-label>
+    </ion-item>
+  </ion-list>
+</ion-content>

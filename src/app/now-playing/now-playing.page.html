@@ -1,0 +1,86 @@
+<ion-content [fullscreen]="true" [class.dark-mode]="isDarkMode">
+  <div class="now-playing-container">
+    <!-- Header -->
+    <div class="header">
+      <button class="back-button" (click)="goBack()">
+        <fa-icon [icon]="['fas', 'chevron-down']" size="lg"></fa-icon>
+      </button>
+      <div class="header-title">
+        <h2>Now Playing</h2>
+      </div>
+      <button class="menu-button">
+        <fa-icon [icon]="['fas', 'ellipsis-h']" size="lg"></fa-icon>
+      </button>
+    </div>
+
+    <!-- Album Art -->
+    <div class="album-container">
+      <div class="album-shadow"></div>
+      <div class="album-art-wrapper">
+        <img [src]="currentTrack?.imageUrl || 'assets/placeholder.png'"
+             [alt]="currentTrack?.title"
+             class="album-art">
+      </div>
+    </div>
+
+    <!-- Track Info -->
+    <div class="track-info">
+      <h1 class="track-title">{{currentTrack?.title || 'No Track Selected'}}</h1>
+      <p class="track-artist">{{currentTrack?.artist || ''}}</p>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-container">
+      <ion-range [(ngModel)]="currentTime"
+                 [max]="duration"
+                 (ionChange)="seek($event)"
+                 class="progress-bar"
+                 [class.dark-mode]="isDarkMode">
+      </ion-range>
+      <div class="time-display">
+        <span class="current-time">{{formatTime(currentTime)}}</span>
+        <span class="total-time">{{formatTime(duration)}}</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <button class="control-button shuffle">
+        <fa-icon [icon]="['fas', 'random']" size="lg"></fa-icon>
+      </button>
+
+      <button class="control-button previous" (click)="previous()">
+        <fa-icon [icon]="['fas', 'step-backward']" size="2x"></fa-icon>
+      </button>
+
+      <button class="play-button" (click)="togglePlay()">
+        <fa-icon [icon]="isPlaying ? ['fas', 'pause'] : ['fas', 'play']" size="lg"></fa-icon>
+      </button>
+
+      <button class="control-button next" (click)="next()">
+        <fa-icon [icon]="['fas', 'step-forward']" size="2x"></fa-icon>
+      </button>
+
+      <button class="control-button repeat">
+        <fa-icon [icon]="['fas', 'sync']" size="lg"></fa-icon>
+      </button>
+    </div>
+
+    <!-- Additional Controls -->
+    <div class="additional-controls">
+      <button class="additional-button">
+        <fa-icon [icon]="['fas', 'volume-up']" size="lg"></fa-icon>
+      </button>
+
+      <button class="additional-button" (click)="toggleLike()">
+        <fa-icon [icon]="['fas', 'heart']"
+                 [ngClass]="{'liked': currentTrack?.liked}"
+                 size="lg"></fa-icon>
+      </button>
+
+      <button class="additional-button">
+        <fa-icon [icon]="['fas', 'list-ul']" size="lg"></fa-icon>
+      </button>
+    </div>
+  </div>
+</ion-content>

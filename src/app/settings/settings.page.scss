@@ -1,0 +1,40 @@
+// settings.page.scss
+@use '../../theme/variables.scss';
+
+.dark-mode {
+  --ion-background-color: var(--ion-color-dark);
+  --ion-text-color: var(--ion-color-light);
+  --ion-item-background: var(--ion-color-dark-shade);
+
+  ion-list {
+    background: var(--ion-color-dark);
+  }
+
+  ion-item {
+    --background: var(--ion-color-dark-shade);
+    --border-color: var(--ion-color-dark-tint);
+  }
+
+  ion-list-header {
+    --background: var(--ion-color-dark);
+  }
+}
+
+.app-title {
+  font-size: 24px;
+  font-weight: bold;
+  background: linear-gradient(135deg, var(--ion-color-primary) 0%, #db2777 100%);
+  --webkit-background-clip: text;
+  --webkit-text-fill-color: transparent;
+}
+
+ion-list-header {
+  --background: var(--ion-background-color);
+  margin-top: 16px;
+
+  ion-label {
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--ion-color-primary);
+  }
+}

@@ -1,0 +1,52 @@
+<ion-header class="player-header ion-no-border">
+  <ion-toolbar>
+    <ion-buttons slot="start">
+      <ion-button>
+        <ion-icon name="chevron-down"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+    <ion-title>Now Playing</ion-title>
+    <ion-buttons slot="end">
+      <ion-button>
+        <ion-icon name="ellipsis-vertical"></ion-icon>
+      </ion-button>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="player-content">
+  <div class="album-artwork">
+    <img [src]="song?.cover" alt="{{ song?.title }}">
+  </div>
+
+  <div class="song-details">
+    <h1>{{ song?.title }}</h1>
+    <p>{{ song?.artist }}</p>
+  </div>
+
+  <div class="player-controls">
+    <div class="progress-container">
+      <div class="progress-time">{{ formatTime(currentTime) }}</div>
+      <ion-progress-bar [value]="currentTime/duration"></ion-progress-bar>
+      <div class="progress-time">{{ formatTime(duration) }}</div>
+    </div>
+
+    <div class="control-buttons">
+      <ion-button fill="clear">
+        <ion-icon name="shuffle"></ion-icon>
+      </ion-button>
+      <ion-button fill="clear">
+        <ion-icon name="play-skip-back"></ion-icon>
+      </ion-button>
+      <ion-button class="play-button" (click)="togglePlay()">
+        <ion-icon [name]="isPlaying ? 'pause' : 'play'"></ion-icon>
+      </ion-button>
+      <ion-button fill="clear">
+        <ion-icon name="play-skip-forward"></ion-icon>
+      </ion-button>
+      <ion-button fill="clear" (click)="toggleLike()">
+        <ion-icon [name]="isLiked ? 'heart' : 'heart-outline'" [color]="isLiked ? 'danger' : ''"></ion-icon>
+      </ion-button>
+    </div>
+  </div>
+</ion-content>
