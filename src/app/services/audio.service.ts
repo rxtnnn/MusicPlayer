@@ -83,24 +83,35 @@ export class AudioService {
   private saveLastPlayedTrack(track: Track) {
     this.storageService.set('last_played_track', track);
   }
+  setCurrentTrack(track: Track): void {
+    this.currentTrack.next(track);
+  }
 
   play(track?: Track): void {
-    if (track) {
-      // If a new track is provided, set it as current
-      this.currentTrack.next(track);
-      this.audio.src = track.previewUrl;
-      this.saveLastPlayedTrack(track);
+  if (track) {
+    // Check if previewUrl exists and is a valid URL
+    if (!track.previewUrl || track.previewUrl === '' || track.previewUrl === 'undefined' || track.previewUrl === 'null') {
+      alert(`No preview available for "${track.title}"`);
+      return;
     }
-
-    this.audio.play();
+    this.currentTrack.next(track);
+    this.audio.src = track.previewUrl;
+    this.saveLastPlayedTrack(track);
   }
+
+  this.audio.play().catch((error) => {
+    console.error('Playback error:', error);
+    alert(`Unable to play track: ${error.message}`);
+  });
+  }
+
 
   pause(): void {
     this.audio.pause();
   }
 
   togglePlay(): void {
-    if (this.audio.paused) {
+    if (!this.audio.paused) {
       this.play();
     } else {
       this.pause();

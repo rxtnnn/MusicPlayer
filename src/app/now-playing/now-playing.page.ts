@@ -28,9 +28,17 @@ export class NowPlayingPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    // Subscribe only once to the current track
     this.subscriptions.push(
       this.audioService.getCurrentTrack().subscribe(track => {
         this.currentTrack = track;
+        // Check if a valid track with a preview URL is available
+        if (track && track.previewUrl) {
+          console.log('Playing track:', track.title);
+          this.audioService.play(track);
+        } else {
+          console.warn('No valid track to play.');
+        }
       }),
 
       this.audioService.getIsPlaying().subscribe(isPlaying => {
@@ -60,7 +68,11 @@ export class NowPlayingPage implements OnInit, OnDestroy {
   }
 
   togglePlay() {
-    this.audioService.togglePlay();
+    if (this.currentTrack && this.currentTrack.previewUrl) {
+      this.audioService.togglePlay();
+    } else {
+      console.warn('No track loaded or preview URL missing.');
+    }
   }
 
   seek(event: any) {

@@ -1,9 +1,9 @@
 export const environment = {
   production: false,
   spotify: {
-    clientId: 'e9f995a0dc5a418ea6af7e393ebceb00', // Replace with your Spotify Client ID
-    clientSecret: '260ccb800c084651a0581575edddd402',
-    redirectUri: 'http://127.0.0.1:3000', // e.g., http://localhost:8100/callback
+    clientId: '07c159ba757f48c5b7ef975f2d661670', // Replace with your Spotify Client ID
+    clientSecret: '421b070e0f094741bdf0b0791609fc44',
+    redirectUri: 'http://com.soundwave://callback', // e.g., http://localhost:8100/callback
     authEndpoint: 'https://accounts.spotify.com/authorize',
     tokenEndpoint: 'https://accounts.spotify.com/api/token',
     apiEndpoint: 'https://api.spotify.com/v1'

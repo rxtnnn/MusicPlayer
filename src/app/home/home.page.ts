@@ -20,7 +20,7 @@ export class HomePage implements OnInit {
   isDarkMode: Observable<boolean>;
 
   constructor(
-    private spotifyService: MusicService,
+    private musicService: MusicService,
     public audioService: AudioService,
     private themeService: ThemeService,
     private router: Router,
@@ -45,7 +45,7 @@ export class HomePage implements OnInit {
   }
 
   async loadGenres() {
-    this.spotifyService.getGenres().subscribe(
+    this.musicService.getGenres().subscribe(
       (data: any) => {
         this.genres = data.categories.items;
       },
@@ -56,7 +56,7 @@ export class HomePage implements OnInit {
   }
 
   async loadNewReleases() {
-    this.spotifyService.getNewReleases().subscribe(
+    this.musicService.getNewReleases().subscribe(
       (data: any) => {
         this.newReleases = data.albums.items.map((item: any) => this.mapSpotifyTrack(item));
       },
@@ -67,7 +67,7 @@ export class HomePage implements OnInit {
   }
 
   async loadFeaturedPlaylists() {
-    this.spotifyService.getPlaylistsByGenre(this.selectedGenre).subscribe(
+    this.musicService.getPlaylistsByGenre(this.selectedGenre).subscribe(
       (data: any) => {
         this.featuredPlaylists = data.playlists.items;
       },
@@ -83,12 +83,12 @@ export class HomePage implements OnInit {
   }
 
   playTrack(track: Track) {
-    this.audioService.play(track);
+    this.audioService.setCurrentTrack(track);
     this.router.navigate(['/now-playing']);
   }
 
   playPlaylist(playlistId: string) {
-    this.spotifyService.getPlaylistTracks(playlistId).subscribe(
+    this.musicService.getPlaylistTracks(playlistId).subscribe(
       (data: any) => {
         const tracks = data.items.map((item: { track: any; }) => this.mapSpotifyTrack(item.track));
         this.audioService.setQueue(tracks);
