@@ -1,15 +1,13 @@
 <ion-header [translucent]="true" [class.dark-mode]="(isDarkMode | async)">
   <ion-toolbar>
+    Your Playlists
     <ion-title>
-      <div class="app-title">
-        <ng-container *ngIf="!selectedPlaylist">Your Playlists</ng-container>
         <ng-container *ngIf="selectedPlaylist">
           <ion-button fill="clear" (click)="backToPlaylists()">
             <fa-icon [icon]="['fas', 'chevron-left']"></fa-icon>
           </ion-button>
           {{selectedPlaylist.name}}
         </ng-container>
-      </div>
     </ion-title>
   </ion-toolbar>
 </ion-header>

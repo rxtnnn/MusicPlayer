@@ -19,15 +19,11 @@ ion-list {
   background: var(--ion-color-dark);
 }
 
-ion-title {
+ion-toolbar{
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
-}
-
-ion-toolbar{
-  align-items: left;
-  width: 100%;
+  padding-left: 16px;
 }
 
 ion-list-header {

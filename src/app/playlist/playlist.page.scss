@@ -4,6 +4,12 @@
   background-color: var(--ion-color-dark);
 }
 
+ion-toolbar{
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  padding-left: 16px;
+}
 .play-container {
   background-color: var(--ion-color-dark);
   color: var(--ion-color-light);
