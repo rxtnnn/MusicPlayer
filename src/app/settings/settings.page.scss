@@ -1,40 +1,153 @@
-// settings.page.scss
 @use '../../theme/variables.scss';
+
+:host {
+  background-color: var(--ion-color-dark);
+}
 
 .dark-mode {
   --ion-background-color: var(--ion-color-dark);
+  --ion-background-color-rgb: var(--ion-color-dark-rgb);
   --ion-text-color: var(--ion-color-light);
-  --ion-item-background: var(--ion-color-dark-shade);
-
-  ion-list {
-    background: var(--ion-color-dark);
-  }
-
-  ion-item {
-    --background: var(--ion-color-dark-shade);
-    --border-color: var(--ion-color-dark-tint);
-  }
-
-  ion-list-header {
-    --background: var(--ion-color-dark);
-  }
 }
 
-.app-title {
+ion-content {
+  --background: var(--ion-color-dark);
+  background-color: var(--ion-color-dark);
+}
+
+ion-list {
+  background: var(--ion-color-dark);
+}
+
+ion-title {
   font-size: 24px;
-  font-weight: bold;
-  background: linear-gradient(135deg, var(--ion-color-primary) 0%, #db2777 100%);
-  --webkit-background-clip: text;
-  --webkit-text-fill-color: transparent;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+ion-toolbar{
+  align-items: left;
+  width: 100%;
 }
 
 ion-list-header {
-  --background: var(--ion-background-color);
-  margin-top: 16px;
+  --background: var(--ion-color-dark);
+  margin-top: 24px;
+  margin-bottom: 8px;
 
   ion-label {
-    font-weight: 600;
+    font-weight: 700;
     font-size: 18px;
-    color: var(--ion-color-primary);
+    color: var(--ion-color-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+}
+
+ion-item {
+  --background: var(--ion-color-dark-tint);
+  --background-activated: var(--ion-color-dark-shade);
+  --background-hover: var(--ion-color-dark-shade);
+  --color: var(--ion-color-light);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --inner-padding-end: 0;
+  --inner-padding-start: 0;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    --background: var(--ion-color-dark-shade);
+  }
+
+  ion-label {
+    margin-left: 16px;
+    font-weight: 500;
+  }
+
+  ion-note {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+}
+
+ion-toggle {
+  --background: rgba(255, 255, 255, 0.2);
+  --background-checked: var(--ion-color-secondary);
+  --handle-background: white;
+  --handle-background-checked: white;
+}
+
+ion-select {
+  --background: transparent;
+  --color: var(--ion-color-light);
+  --padding-top: 10px;
+  --padding-bottom: 10px;
+  --placeholder-color: var(--ion-color-light);
+  --placeholder-opacity: 0.7;
+}
+
+// Specific item styles
+.sign-out-item {
+  --background: rgba(255, 0, 0, 0.1);
+
+  ion-label {
+    color: var(--ion-color-danger);
+  }
+}
+
+// Buttons and interactions
+.item-button {
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: var(--ion-color-dark-shade);
+  }
+}
+
+// Storage section
+.storage-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  .storage-info {
+    display: flex;
+    flex-direction: column;
+
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 4px;
+      color: var(--ion-color-light);
+    }
+
+    p {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.6);
+      margin: 0;
+    }
+  }
+}
+
+// Equalizer and other specialized items
+.equalizer-item {
+  ion-note {
+    color: var(--ion-color-secondary);
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 360px) {
+  ion-item {
+    ion-label {
+      font-size: 14px;
+    }
+
+    ion-note {
+      font-size: 12px;
+    }
   }
 }

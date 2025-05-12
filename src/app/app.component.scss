@@ -1,9 +1,34 @@
+@use '../theme/variables.scss';
+
+ion-app {
+  font-family: var(--ion-font-family);
+}
+
 ion-tab-bar {
-  --background: linear-gradient(135deg, #ff6b9b, #f878b5);
-  --color: white;
+  --background: var(--ion-color-dark);
+  --color: rgba(255, 255, 255, 0.6);
+  border-top: 1px solid var(--ion-color-dark-tint);
+  padding: 8px 0;
 }
 
 ion-tab-button {
-  --color-selected: white;
-  --color: rgba(255, 255, 255, 0.7);
+  --color-selected: var(--ion-color-secondary);
+  --color: rgba(255, 255, 255, 0.4);
+  transition: all 0.3s ease;
+
+  &.tab-selected {
+    transform: scale(1.1);
+  }
+}
+
+fa-icon {
+  font-size: 20px;
+  transition: all 0.3s ease;
+}
+
+ion-label {
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }

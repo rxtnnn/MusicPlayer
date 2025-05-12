@@ -14,7 +14,7 @@
   </ion-toolbar>
 </ion-header>
 
-<ion-content [fullscreen]="true" [class.dark-mode]="(isDarkMode | async)">
+<ion-content [class.dark-mode]="(isDarkMode | async)" class="play-container">
   <!-- Playlist List View -->
   <div *ngIf="!selectedPlaylist">
     <!-- Liked Songs -->
