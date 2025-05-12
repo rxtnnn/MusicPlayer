@@ -1,5 +1,5 @@
 <ion-header [translucent]="true" [class.dark-mode]="(isDarkMode | async)">
-  <ion-toolbar>Harmony
+  <ion-toolbar>Soundwave
     <ion-buttons slot="end">
       <ion-button>
         <fa-icon [icon]="['fas', 'search']" size="lg"></fa-icon>
@@ -15,15 +15,15 @@
   <!-- Genre Selector -->
   <div class="genre-scroll-container">
     <div class="genre-item"
-         [class.active]="selectedGenre === 'all'"
-         (click)="selectGenre('all')">
+         [class.active]="selectedCategory === 'all'"
+         (click)="selectCategory('all')">
       All
     </div>
-    <div *ngFor="let genre of genres"
+    <div *ngFor="let category of categories"
          class="genre-item"
-         [class.active]="selectedGenre === genre.id"
-         (click)="selectGenre(genre.id)">
-      {{genre.name}}
+         [class.active]="selectedCategory === category.id"
+         (click)="selectCategory(category.id)">
+      {{category.name}}
     </div>
   </div>
 

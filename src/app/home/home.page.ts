@@ -1,10 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { LoadingController } from '@ionic/angular';
+import { LoadingController, AlertController } from '@ionic/angular';
 import { MusicService } from '../services/music.service';
 import { AudioService, Track } from '../services/audio.service';
 import { ThemeService } from '../services/theme.service';
-import { Observable } from 'rxjs';
+import { firstValueFrom, Observable } from 'rxjs';
+
+interface SpotifyCategory {
+  id: string;
+  name: string;
+  icons?: {url: string}[];
+  href?: string;
+}
 
 @Component({
   selector: 'app-home',
@@ -13,73 +20,113 @@ import { Observable } from 'rxjs';
   standalone: false
 })
 export class HomePage implements OnInit {
-  genres: any[] = [];
-  newReleases: any[] = [];
+  categories: SpotifyCategory[] = [];
+  newReleases: Track[] = [];
   featuredPlaylists: any[] = [];
-  selectedGenre: string = 'all';
+  selectedCategory = 'all';
   isDarkMode: Observable<boolean>;
+  isLoading = false;
+  debugInfo = '';
 
   constructor(
     private musicService: MusicService,
     public audioService: AudioService,
     private themeService: ThemeService,
     private router: Router,
-    private loadingCtrl: LoadingController
+    private loadingCtrl: LoadingController,
+    private alertController: AlertController
   ) {
     this.isDarkMode = this.themeService.isDarkMode();
   }
 
   async ngOnInit() {
+    await this.loadInitialData();
+  }
+
+  async loadInitialData() {
     const loading = await this.loadingCtrl.create({
       message: 'Loading music...'
+    });
+
+    this.isLoading = true;
+    await loading.present();
+
+    try {
+      // Authenticate first
+      console.log('Starting authentication...');
+      const authSuccess = await firstValueFrom(this.musicService.authenticate());
+      if (!authSuccess) {
+        throw new Error('Authentication failed');
+      }
+      console.log('Authentication successful');
+
+      // Load data in parallel
+      console.log('Loading categories, new releases, and featured playlists...');
+      const [ categoriesData, newRelData, playlists ] = await Promise.all([
+        firstValueFrom(this.musicService.getGenres()),
+        firstValueFrom(this.musicService.getNewReleases()),
+        firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
+      ]);
+
+      // Process categories data
+      this.categories = categoriesData.categories.items.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        icons: item.icons
+      }));
+
+      // Log available categories for debugging
+      this.debugInfo = `Available categories: ${this.categories.map(c => c.name).join(', ')}`;
+      console.log(this.debugInfo);
+      console.log('Category IDs:', this.categories.map(c => c.id));
+
+      // Process new releases and playlists
+      this.newReleases = newRelData.albums.items.map((item: any) => this.mapSpotifyTrack(item));
+      this.featuredPlaylists = playlists;
+
+      console.log(`Loaded ${this.categories.length} categories, ${this.newReleases.length} new releases, and ${this.featuredPlaylists.length} featured playlists`);
+    } catch (err) {
+      console.error('Error loading initial data', err);
+      await this.showErrorAlert('Failed to load music data. Please try again.');
+    } finally {
+      this.isLoading = false;
+      await loading.dismiss();
+    }
+  }
+
+  async selectCategory(categoryId: string) {
+    this.selectedCategory = categoryId;
+    const loading = await this.loadingCtrl.create({
+      message: 'Loading playlists…'
     });
     await loading.present();
 
     try {
-      await this.loadGenres();
-      await this.loadNewReleases();
-      await this.loadFeaturedPlaylists();
+      const playlists = await firstValueFrom(
+        this.musicService.getPlaylistsByGenre(categoryId)
+      );
+      console.log(`playlists for ${categoryId}:`, playlists);
+      this.featuredPlaylists = playlists;
+      if (playlists.length === 0) {
+        const name = this.categories.find(c => c.id === categoryId)?.name || categoryId;
+        await this.showErrorAlert(`No playlists found for “${name}”.`);
+      }
+    } catch (err) {
+      console.error('Error selecting category', err);
+      await this.showErrorAlert('Failed to load playlists.');
     } finally {
-      loading.dismiss();
+      await loading.dismiss();
     }
   }
 
-  async loadGenres() {
-    this.musicService.getGenres().subscribe(
-      (data: any) => {
-        this.genres = data.categories.items;
-      },
-      error => {
-        console.error('Error loading genres', error);
-      }
-    );
-  }
+  async showErrorAlert(message: string) {
+    const alert = await this.alertController.create({
+      header: 'Notice',
+      message: message,
+      buttons: ['OK']
+    });
 
-  async loadNewReleases() {
-    this.musicService.getNewReleases().subscribe(
-      (data: any) => {
-        this.newReleases = data.albums.items.map((item: any) => this.mapSpotifyTrack(item));
-      },
-      error => {
-        console.error('Error loading new releases', error);
-      }
-    );
-  }
-
-  async loadFeaturedPlaylists() {
-    this.musicService.getPlaylistsByGenre(this.selectedGenre).subscribe(
-      (data: any) => {
-        this.featuredPlaylists = data.playlists.items;
-      },
-      error => {
-        console.error('Error loading featured playlists', error);
-      }
-    );
-  }
-
-  selectGenre(genreId: string) {
-    this.selectedGenre = genreId;
-    this.loadFeaturedPlaylists();
+    await alert.present();
   }
 
   playTrack(track: Track) {
@@ -88,52 +135,94 @@ export class HomePage implements OnInit {
   }
 
   playPlaylist(playlistId: string) {
-    this.musicService.getPlaylistTracks(playlistId).subscribe(
-      (data: any) => {
-        const tracks = data.items.map((item: { track: any; }) => this.mapSpotifyTrack(item.track));
-        this.audioService.setQueue(tracks);
-        this.router.navigate(['/now-playing']);
+    console.log(`Playing playlist: ${playlistId}`);
+    this.musicService.getPlaylistTracks(playlistId).subscribe({
+      next: (data) => {
+        if (!Array.isArray(data)) {
+          console.error('Expected array of tracks but got:', data);
+          this.showErrorAlert('Failed to parse playlist tracks.');
+          return;
+        }
+
+        const tracks = data.map((item: any) => {
+          if (!item.track) {
+            console.warn('Track item missing track property:', item);
+            return null;
+          }
+          return this.mapSpotifyTrack(item.track);
+        }).filter(track => track !== null) as Track[];
+
+        console.log(`Mapped ${tracks.length} valid tracks from playlist`);
+
+        if (tracks.length > 0) {
+          this.audioService.setQueue(tracks);
+          this.router.navigate(['/now-playing']);
+        } else {
+          this.showErrorAlert('No playable tracks found in this playlist.');
+        }
       },
-      error => {
-        console.error('Error loading playlist tracks', error);
+      error: (err) => {
+        console.error('Error loading playlist tracks', err);
+        this.showErrorAlert('Failed to load playlist tracks.');
       }
-    );
+    });
   }
 
   private mapSpotifyTrack(item: any): Track {
-  // First, log the item to debug what we're receiving
-  console.log('Spotify track item:', item);
+    if (!item) {
+      console.warn('Attempted to map null or undefined item to track');
+      return this.createEmptyTrack();
+    }
 
-  // Check the structure of 'album' and 'images' if they exist
-  if (item.album) {
-    console.log('Album object:', item.album);
-    console.log('Album images:', item.album.images);
+    try {
+      let imageUrl = '';
+      if (item.images?.length) {
+        imageUrl = item.images[0].url;
+      } else if (item.album?.images?.length) {
+        imageUrl = item.album.images[0].url;
+      }
+
+      return {
+        id: item.id || `local-${Date.now()}`,
+        title: item.name || 'Unknown Title',
+        artist: Array.isArray(item.artists)
+          ? item.artists.map((a: any) => a.name).join(', ')
+          : 'Unknown Artist',
+        album: item.album?.name || 'Unknown Album',
+        duration: item.duration_ms ? item.duration_ms / 1000 : 0,
+        imageUrl: imageUrl || 'assets/default-album-art.png',
+        previewUrl: item.preview_url || '',
+        spotifyId: item.id || '',
+        liked: false
+      };
+    } catch (error) {
+      console.error('Error mapping track:', error, item);
+      return this.createEmptyTrack();
+    }
   }
 
-  // Handle different response structures from different Spotify API endpoints
-  let imageUrl = '';
-
-  // Some endpoints directly include images at the top level (like albums in new releases)
-  if (item.images && item.images.length > 0) {
-    imageUrl = item.images[0].url;
+  private createEmptyTrack(): Track {
+    return {
+      id: `empty-${Date.now()}`,
+      title: 'Unknown Track',
+      artist: 'Unknown Artist',
+      album: 'Unknown Album',
+      duration: 0,
+      imageUrl: 'assets/default-album-art.png',
+      previewUrl: '',
+      spotifyId: '',
+      liked: false
+    };
   }
-  // Others have images nested in the album object (like tracks)
-  else if (item.album && item.album.images && item.album.images.length > 0) {
-    imageUrl = item.album.images[0].url;
-  }
 
-  return {
-    id: item.id || `local-${Date.now()}`,
-    title: item.name || 'Unknown Title',
-    artist: item.artists && Array.isArray(item.artists)
-      ? item.artists.map((a: { name: string }) => a.name || 'Unknown Artist').join(', ')
-      : 'Unknown Artist',
-    album: item.album && item.album.name ? item.album.name : 'Unknown Album',
-    duration: item.duration_ms ? item.duration_ms / 1000 : 0,
-    imageUrl: imageUrl || 'assets/default-album-art.png', // Always provide a fallback
-    previewUrl: item.preview_url || '',
-    spotifyId: item.id || '',
-    liked: false
-  };
-}
+  // Refresh method to reload data
+  async refreshData(event?: any) {
+    try {
+      await this.loadInitialData();
+      if (event) event.target.complete();
+    } catch (err) {
+      console.error('Error refreshing data', err);
+      if (event) event.target.complete();
+    }
+  }
 }
