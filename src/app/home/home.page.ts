@@ -1,5 +1,3 @@
-// src/app/home/home.page.ts
-
 import {
   Component,
   OnInit,
@@ -10,12 +8,13 @@ import { Router } from '@angular/router';
 import {
   LoadingController,
   AlertController,
+  ToastController,
 } from '@ionic/angular';
 import { MusicService } from '../services/music.service';
 import { AudioService, Track } from '../services/audio.service';
 import { StorageService } from '../services/storage.service';
-import { ThemeService } from '../services/theme.service';
-import { firstValueFrom, of } from 'rxjs';
+import { SettingsService } from '../services/settings.service';
+import { firstValueFrom, Observable, of, Subscription } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 
 interface SpotifyCategory {
@@ -45,23 +44,28 @@ export class HomePage implements OnInit {
   featuredPlaylists: any[] = [];
   recommendedTracks: Track[] = [];
   selectedCategory = 'all';
-
-  // UI state
-  isDarkMode = this.themeService.isDarkMode();
   isLoading = false;
+  private settingsSubscription?: Subscription;
+  isDarkMode?: boolean;
 
   constructor(
     private musicService: MusicService,
     public audioService: AudioService,
-    private themeService: ThemeService,
+    private settingService: SettingsService,
     private router: Router,
     private loadingCtrl: LoadingController,
     private alertController: AlertController,
-    private storageService: StorageService
+    private storageService: StorageService,
+    private toast: ToastController
   ) {}
 
   async ngOnInit() {
     await this.loadInitialData();
+     this.settingsSubscription = this.settingService.settings$.subscribe(settings => {
+      this.isDarkMode = settings.darkMode;
+      document.body.setAttribute('color-theme', settings.darkMode ? 'dark' : 'light');
+
+     });
   }
 
   /** Toggle animated search bar open/close */
@@ -169,25 +173,45 @@ export class HomePage implements OnInit {
     }
   }
 
-  /** Handle local audio file upload */
-  onFileSelected(event: any) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    const track: Track = {
-      id: `local-${Date.now()}`,
-      title: file.name,
-      artist: 'Local File',
-      album: 'Local Files',
-      duration: 0,
-      imageUrl: 'assets/default-album-art.png',
-      previewUrl: url,
-      spotifyId: '',
-      liked: false,
-    };
-    this.storageService.saveTrack(track);
-    this.newReleases.unshift(track);
+  async onFileSelected(event: any) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    // Show loading indicator
+    const loading = await this.loadingCtrl.create({
+      message: 'Processing audio file...',
+    });
+    await loading.present();
+
+    try {
+      // Process the file
+      const file = files[0];
+
+      // Check if it's an audio file
+      if (!file.type.startsWith('audio/')) {
+        this.showError(`${file.name} is not a valid audio file.`);
+        return;
+      }
+
+      // Add the track using the enhanced AudioService
+      const track = await this.audioService.addLocalTrack(file);
+
+      // Add to new releases for display
+      this.newReleases.unshift(track);
+
+      // Navigate to now playing page
+      this.router.navigate(['/now-playing']);
+
+      // Show success message
+      this.showToast(`${track.title} added to your library`);
+    } catch (error) {
+      console.error('Error processing audio file:', error);
+      this.showError('Failed to process audio file. Please try another file.');
+    } finally {
+      loading.dismiss();
+    }
   }
+
 
   /** Initial data load: auth, genres, releases, playlists */
   private async loadInitialData() {
@@ -258,5 +282,16 @@ export class HomePage implements OnInit {
       buttons: ['OK'],
     });
     await alert.present();
+  }
+
+  // Add a toast method
+  private async showToast(message: string) {
+    const toast = await this.toast.create({
+      message,
+      duration: 2000,
+      position: 'bottom',
+      color: 'success'
+    });
+    await toast.present();
   }
 }

@@ -5,15 +5,15 @@ ion-app {
 }
 
 ion-tab-bar {
-  --background: var(--ion-color-dark);
-  --color: rgba(255, 255, 255, 0.6);
-  border-top: 1px solid var(--ion-color-dark-tint);
+  --background: var(--tab-bar-background);
+  --color: var(--tab-bar-color);
+  border-top: 1px solid var(--tab-bar-border-color);
   padding: 8px 0;
 }
 
 ion-tab-button {
   --color-selected: var(--ion-color-secondary);
-  --color: rgba(255, 255, 255, 0.4);
+  --color: var(--tab-bar-color);
   transition: all 0.3s ease;
 
   &.tab-selected {
@@ -31,4 +31,17 @@ ion-label {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+// Apply theme-specific styles
+body[color-theme="dark"] ion-tab-bar {
+  --background: var(--ion-color-dark);
+  --color: rgba(255, 255, 255, 0.6);
+  border-top: 1px solid var(--ion-color-dark-tint);
+}
+
+body[color-theme="light"] ion-tab-bar {
+  --background: white;
+  --color: rgba(0, 0, 0, 0.6);
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }

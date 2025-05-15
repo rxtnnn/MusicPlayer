@@ -1,6 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { App } from '@capacitor/app';
 import { Platform } from '@ionic/angular';
+import { SettingsService } from './services/settings.service';
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
@@ -8,7 +9,7 @@ import { Platform } from '@ionic/angular';
   standalone: false
 })
 export class AppComponent {
-  constructor(private platform: Platform) {
+  constructor(private platform: Platform, private settingsService: SettingsService) {
     this.platform.ready().then(() => {
       App.addListener('appUrlOpen', (data: { url: string }) => {
         // e.g. data.url === 'capacitor://localhost/callback?code=…'
@@ -22,5 +23,9 @@ export class AppComponent {
         }
       });
     });
+  }
+  ngOnInit() {
+    // Initialize theme based on saved settings
+    this.settingsService.initializeTheme();
   }
 }

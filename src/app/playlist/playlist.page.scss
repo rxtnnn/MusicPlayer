@@ -57,6 +57,46 @@ ion-toolbar{
   }
 }
 
+// Add this to your playlist.page.scss
+.downloaded-songs-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #3e86fa 0%, #3a66e0 100%);
+  border-radius: 16px;
+  padding: 20px;
+  margin: 16px;
+  box-shadow: 0 8px 20px rgba(62, 134, 250, 0.3);
+  transition: transform 0.3s ease;
+
+  &:hover {
+    transform: scale(1.02);
+  }
+
+  .downloaded-songs-gradient {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    margin-right: 20px;
+  }
+
+  .downloaded-songs-info {
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 8px;
+    }
+
+    p {
+      font-size: 14px;
+      margin: 0;
+      opacity: 0.8;
+    }
+  }
+}
 // Playlists Grid
 .playlists-grid {
   display: grid;

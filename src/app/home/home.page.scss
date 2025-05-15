@@ -41,7 +41,6 @@ ion-toolbar {
     font-size: 22px;
     font-weight: 800;
     letter-spacing: -0.5px;
-    color: var(--ion-color-light);
   }
 }
 
@@ -51,7 +50,6 @@ ion-toolbar {
   gap: 4px;
 
   .icon-btn {
-    --color: var(--ion-color-light);
     --padding-start: 8px;
     --padding-end: 8px;
     margin: 0;
@@ -67,7 +65,6 @@ ion-toolbar {
   height: 0;
   overflow: hidden;
   transition: height 0.3s ease;
-  background: var(--ion-color-dark);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 
   &.active {
@@ -82,26 +79,18 @@ ion-toolbar {
   height: 100%;
 
   .search-icon {
-    color: rgba(255, 255, 255, 0.5);
     margin-right: 12px;
     font-size: 18px;
   }
 
   .search-input {
     flex: 1;
-    background: transparent;
     border: none;
     outline: none;
-    color: var(--ion-color-light);
     font-size: 16px;
-
-    &::placeholder {
-      color: rgba(255, 255, 255, 0.5);
-    }
   }
 
   ion-button {
-    --color: rgba(255, 255, 255, 0.7);
     margin: 0;
     font-size: 18px;
   }
@@ -114,11 +103,9 @@ ion-toolbar {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--ion-color-dark);
   z-index: 10;
   transform: translateY(100%);
   transition: transform 0.3s ease;
-
   &.has-results {
     transform: translateY(0);
   }
@@ -136,7 +123,6 @@ ion-toolbar {
   h3 {
     font-size: 16px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.7);
     margin: 0;
   }
 }
@@ -193,7 +179,6 @@ ion-toolbar {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
     opacity: 0;
     transform: scale(0.8);
     transition: all 0.3s ease;
@@ -212,7 +197,6 @@ ion-toolbar {
   h4 {
     font-size: 14px;
     font-weight: 600;
-    color: var(--ion-color-light);
     margin: 0 0 4px;
     white-space: nowrap;
     overflow: hidden;
@@ -221,7 +205,6 @@ ion-toolbar {
 
   p {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
     margin: 0 0 4px;
     white-space: nowrap;
     overflow: hidden;
@@ -230,7 +213,6 @@ ion-toolbar {
 
   .album {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -258,20 +240,17 @@ ion-toolbar {
 
     fa-icon {
       font-size: 36px;
-      color: rgba(255, 255, 255, 0.3);
     }
   }
 
   h3 {
     font-size: 20px;
     font-weight: 600;
-    color: var(--ion-color-light);
     margin: 0 0 8px;
   }
 
   p {
     font-size: 16px;
-    color: rgba(255, 255, 255, 0.6);
     margin: 0;
   }
 }
@@ -279,6 +258,7 @@ ion-toolbar {
 // Main Content
 .main-content {
   transition: all 0.3s ease;
+  background-color: var(--ion-color-dark);
 
   &.dimmed {
     opacity: 0.3;
@@ -308,14 +288,12 @@ ion-toolbar {
   font-size: 14px;
   font-weight: 600;
   background-color: var(--ion-color-dark-tint);
-  color: rgba(255, 255, 255, 0.7);
   white-space: nowrap;
   transition: all 0.3s ease;
   cursor: pointer;
 
   &.active {
     background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
-    color: white;
     transform: scale(1.05);
     box-shadow: 0 4px 10px rgba(106, 90, 205, 0.3);
   }
@@ -354,7 +332,6 @@ ion-toolbar {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
     box-shadow: 0 4px 10px rgba(106, 90, 205, 0.3);
   }
 
@@ -364,13 +341,11 @@ ion-toolbar {
     h3 {
       font-size: 18px;
       font-weight: 700;
-      color: var(--ion-color-light);
       margin: 0 0 4px;
     }
 
     p {
       font-size: 14px;
-      color: rgba(255, 255, 255, 0.7);
       margin: 0;
     }
   }
@@ -413,12 +388,10 @@ ion-toolbar {
   h2 {
     font-size: 20px;
     font-weight: 700;
-    color: var(--ion-color-light);
     margin: 0;
   }
 
   ion-button {
-    --color: var(--ion-color-secondary);
     font-size: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -479,7 +452,6 @@ ion-toolbar {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
     opacity: 0;
     transform: scale(0.8);
     transition: all 0.3s ease;
@@ -509,7 +481,6 @@ ion-toolbar {
 .playlist-title, .track-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--ion-color-light);
   margin: 0 0 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -518,7 +489,6 @@ ion-toolbar {
 
 .playlist-description, .track-artist {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -556,25 +526,16 @@ ion-toolbar {
       .track-item-title {
         font-size: 16px;
         font-weight: 600;
-        color: var(--ion-color-light);
         margin: 0 0 4px;
       }
 
       .track-item-artist {
         font-size: 14px;
-        color: rgba(255, 255, 255, 0.6);
         margin: 0;
       }
     }
   }
 
-  .track-item-right {
-    color: rgba(255, 255, 255, 0.6);
-
-    .liked {
-      color: var(--ion-color-secondary);
-    }
-  }
 }
 
 // Mini Player
@@ -589,7 +550,6 @@ ion-toolbar {
   align-items: center;
   padding: 0 16px;
   background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
-  color: white;
   z-index: 1000;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
 

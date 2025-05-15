@@ -1,4 +1,4 @@
-<ion-header [translucent]="true" [class.dark-mode]="(isDarkMode | async)">
+<ion-header [translucent]="true">
   <ion-toolbar>
     <div class="toolbar-container">
       <!-- Logo/App Name -->
@@ -37,7 +37,7 @@
   </ion-toolbar>
 </ion-header>
 
-<ion-content [fullscreen]="true" [class.dark-mode]="(isDarkMode | async)">
+<ion-content class="home-container">
   <!-- Search Results Container -->
   <div class="search-results-container" *ngIf="searchActive && searchQuery" [class.has-results]="searchResults.length > 0">
     <div class="search-results-content">
@@ -75,7 +75,7 @@
   </div>
 
   <!-- Main Content -->
-  <div class="main-content" [class.dimmed]="searchActive">
+  <div class="main-content" [class.dimmed]="searchActive" class="home-container">
     <!-- Genre Selector -->
     <div class="genre-scroll-container">
       <div

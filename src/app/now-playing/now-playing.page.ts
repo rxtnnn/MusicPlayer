@@ -2,8 +2,8 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { Location } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { AudioService, Track } from '../services/audio.service';
-import { ThemeService } from '../services/theme.service';
 import { StorageService } from '../services/storage.service';
+import { SettingsService } from '../services/settings.service';
 
 @Component({
   selector: 'app-now-playing',
@@ -16,13 +16,13 @@ export class NowPlayingPage implements OnInit, OnDestroy {
   isPlaying = false;
   currentTime = 0;
   duration = 0;
-  isDarkMode = false;
-
+  isDarkMode?: boolean;
+  private settingsSubscription?: Subscription;
   private subscriptions: Subscription[] = [];
 
   constructor(
     public audioService: AudioService,
-    private themeService: ThemeService,
+    private settingsService: SettingsService,
     private storageService: StorageService,
     private location: Location
   ) {}
@@ -53,14 +53,16 @@ export class NowPlayingPage implements OnInit, OnDestroy {
         this.duration = duration;
       }),
 
-      this.themeService.isDarkMode().subscribe(isDark => {
-        this.isDarkMode = isDark;
-      })
+      this.settingsSubscription = this.settingsService.settings$.subscribe(settings => {
+        this.isDarkMode = settings.darkMode;
+        document.body.setAttribute('color-theme', settings.darkMode ? 'dark' : 'light');
+      }),
     );
   }
 
   ngOnDestroy() {
     this.subscriptions.forEach(sub => sub.unsubscribe());
+    this.audioService.cleanup();
   }
 
   goBack() {

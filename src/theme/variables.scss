@@ -25,12 +25,12 @@
   --ion-color-dark-tint: #282828;
 
   // Light Mode Colors
-  --ion-color-light: #f4f4f4;
-  --ion-color-light-rgb: 244,244,244;
+  --ion-color-light: #f5f5f5;
+  --ion-color-light-rgb: 245,245,245;
   --ion-color-light-contrast: #000000;
   --ion-color-light-contrast-rgb: 0,0,0;
   --ion-color-light-shade: #d7d7d7;
-  --ion-color-light-tint: #f5f5f5;
+  --ion-color-light-tint: #ffffff;
 
   // Typography
   --ion-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
@@ -43,14 +43,235 @@
 }
 
 // Dark Mode Styles
-.dark-mode {
+body[color-theme="dark"] {
   --ion-background-color: var(--ion-color-dark);
   --ion-background-color-rgb: var(--ion-color-dark-rgb);
   --ion-text-color: var(--ion-color-light);
   --ion-text-color-rgb: var(--ion-color-light-rgb);
+  --ion-card-background: var(--ion-color-dark-tint);
+
+  // Global Overrides
+  --background-color: var(--ion-color-dark);
+  --text-color: var(--ion-color-light);
+  --toolbar-background: var(--ion-color-dark-shade);
+  --item-background: var(--ion-color-dark-tint);
+  --card-background: var(--ion-color-dark-tint);
+  --border-color: rgba(255, 255, 255, 0.1);
+  --secondary-text: rgba(255, 255, 255, 0.7);
+  --tertiary-text: rgba(255, 255, 255, 0.5);
+
+  // Tabs
+  --tab-bar-background: var(--ion-color-dark);
+  --tab-bar-border-color: var(--ion-color-dark-tint);
+  --tab-bar-color: rgba(255, 255, 255, 0.6);
 
   ion-content {
     --background: var(--ion-color-dark);
+    color: var(--ion-color-light);
+  }
+
+  ion-header, ion-toolbar {
+    --background: var(--ion-color-dark-shade);
+    --color: var(--ion-color-light);
+  }
+
+  /* override cards/items */
+  ion-item, ion-card {
+    --background: var(--ion-color-dark-tint);
+    --color: var(--ion-color-light);
+  }
+
+  ion-list {
+    background-color: var(--ion-color-dark);
+  }
+
+  ion-list-header {
+    --background: var(--ion-color-dark);
+  }
+}
+
+// Light Mode Styles
+body[color-theme="light"] {
+  --ion-background-color: var(--ion-color-light);
+  --ion-background-color-rgb: var(--ion-color-light-rgb);
+  --ion-text-color: var(--ion-color-dark);
+  --ion-text-color-rgb: var(--ion-color-dark-rgb);
+  --ion-card-background: white;
+
+  // Global Overrides
+  --background-color: var(--ion-color-light);
+  --text-color: var(--ion-color-dark);
+  --toolbar-background: white;
+  --item-background: white;
+  --card-background: white;
+  --border-color: rgba(0, 0, 0, 0.1);
+  --secondary-text: rgba(0, 0, 0, 0.7);
+  --tertiary-text: rgba(0, 0, 0, 0.5);
+
+  // Tabs
+  --tab-bar-background: white;
+  --tab-bar-border-color: rgba(0, 0, 0, 0.1);
+  --tab-bar-color: rgba(0, 0, 0, 0.6);
+
+  ion-content {
+    --background: var(--ion-color-light);
+    color: var(--ion-color-dark);
+  }
+
+  ion-header, ion-toolbar {
+    --background: white;
+    --color: var(--ion-color-dark);
+  }
+
+  /* override cards/items */
+  ion-item, ion-card {
+    --background: white;
+    --color: var(--ion-color-dark);
+  }
+
+  ion-list {
+    background-color: var(--ion-color-light);
+  }
+
+  ion-list-header {
+    --background: var(--ion-color-light);
+  }
+
+  /* Target specific components for home page */
+  ion-content.home-container {
+    --background: var(--ion-color-light);
+
+    .search-input-wrapper{
+       --background: var(--ion-color-light);
+      color: var(--ion-color-dark) !important;
+    }
+    .search-input-wrapper .search-input{
+       --background: var(--ion-color-light);
+      color: var(--ion-color-dark) !important;
+    }
+
+    .main-content {
+      background-color: var(--ion-color-light);
+      color: var(--ion-color-dark);
+    }
+
+    .app-branding .app-name{
+      color: black !important;
+    }
+    .search-input {
+      color: var(--ion-color-light) !important;
+    }
+
+    .toolbar-actions .icon-btn {
+      --color: var(--ion-color-dark) !important;
+    }
+
+    .search-results-container {
+      background-color: var(--ion-color-light);
+    }
+
+    .genre-item {
+      background-color: white;
+      color: var(--ion-color-dark);
+
+      &.active {
+        color: white;
+      }
+    }
+
+    .section-header h2 {
+      color: var(--ion-color-dark);
+    }
+
+    .track-info{
+      background-color: white;
+      box-shadow: rgba(0, 0, 0, 0.1);
+    }
+
+    .track-item {
+      background-color: white;
+      .track-item-title {
+        color: var(--ion-color-dark);
+      }
+    }
+
+    .track-title, .playlist-title {
+      color: var(--ion-color-dark);
+    }
+    h3{
+      color: var(--ion-color-dark);
+    }
+  }
+
+  /* Now Playing Page */
+  ion-content.now-playing {
+    --background: var(--ion-color-light);
+
+    .now-playing-container {
+      background-color: var(--ion-color-light);
+      color: var(--ion-color-dark);
+
+      .back-button, .menu-button {
+        color: var(--ion-color-dark);
+      }
+
+      .header-title h2 {
+        color: var(--ion-color-dark);
+      }
+
+      .track-title {
+        color: var(--ion-color-dark);
+      }
+
+      .track-artist {
+        color: var(--ion-color-dark) !important;
+      }
+    }
+  }
+
+  /* Playlist Page */
+  ion-content.play-container, ion-toolbar.play-container {
+    --background: var(--ion-color-light);
+    --color: var(--ion-color-dark);
+
+    .playlist-card, .create-playlist-card {
+      background-color: white;
+
+      h3 {
+        color: var(--ion-color-dark);
+      }
+    }
+
+    .track-item {
+      background-color: white;
+
+      .track-title {
+        color: var(--ion-color-dark);
+      }
+    }
+
+    .playlist-header-info h1 {
+      color: var(--ion-color-dark);
+    }
+  }
+
+  /* Settings Page */
+  ion-content.settings {
+    --background: var(--ion-color-light);
+
+    ion-list {
+      background: var(--ion-color-light);
+    }
+
+    ion-item {
+      --background: white;
+      --color: var(--ion-color-dark);
+      --border-color: rgba(0, 0, 0, 0.1);
+
+      &:hover {
+        --background: var(--ion-color-light-shade);
+      }
+    }
   }
 }
 
@@ -63,4 +284,11 @@
   background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+// Custom Dark Mode Range Component
+ion-range.dark-mode {
+  --bar-background: rgba(255, 255, 255, 0.2);
+  --bar-background-active: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
+  --knob-background: var(--ion-color-secondary);
 }

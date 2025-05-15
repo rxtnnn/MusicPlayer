@@ -1,80 +1,101 @@
-import { Component, OnInit } from '@angular/core';
-import { ThemeService } from '../services/theme.service';
-import { StorageService } from '../services/storage.service';
+// src/app/settings/settings.page.ts
+
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { SettingsService } from '../services/settings.service';
 import { ToastController } from '@ionic/angular';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-settings',
   templateUrl: './settings.page.html',
   styleUrls: ['./settings.page.scss'],
-  standalone: false,
+  standalone: false
 })
-export class SettingsPage implements OnInit {
-  isDarkMode: any;
+export class SettingsPage implements OnInit, OnDestroy {
+  // Settings properties
+  isDarkMode = false;
   streamingQuality = 'High';
   downloadQuality = 'High';
   cacheSize = '0 MB';
 
+  // Subscription to cleanup on destroy
+  private settingsSubscription!: Subscription;
+
   constructor(
-    private themeService: ThemeService,
-    private storageService: StorageService,
-    private toastCtrl: ToastController
+    private settingsService: SettingsService,
+    private toast: ToastController
   ) {}
 
   async ngOnInit() {
-    this.isDarkMode = await this.themeService.isDarkMode().toPromise();
-    this.streamingQuality = await this.storageService.get('streaming_quality') || 'High';
-    this.downloadQuality = await this.storageService.get('download_quality') || 'High';
-    await this.calculateCacheSize();
+    // Subscribe to settings changes
+    this.settingsSubscription = this.settingsService.settings$.subscribe(settings => {
+      this.isDarkMode = settings.darkMode;
+      this.streamingQuality = settings.streamingQuality;
+      this.downloadQuality = settings.downloadQuality;
+    });
+
+    // Calculate cache size on init
+    this.calculateCacheSize();
   }
 
-  toggleDarkMode() {
-    this.isDarkMode = !this.isDarkMode;
-    this.themeService.setDarkMode(this.isDarkMode);
+  ngOnDestroy() {
+    // Clean up subscription to prevent memory leaks
+    if (this.settingsSubscription) {
+      this.settingsSubscription.unsubscribe();
+    }
   }
 
-  async setStreamingQuality(quality: string) {
-    this.streamingQuality = quality;
-    await this.storageService.set('streaming_quality', quality);
+  /**
+   * Handle theme toggle in UI
+   */
+  async toggleTheme(event: any) {
+    const isDarkMode = event.detail.checked;
+    await this.settingsService.setDarkMode(isDarkMode);
+  }
+
+  /**
+   * Handle streaming quality change
+   */
+  async onSetStreaming(quality: string) {
+    await this.settingsService.setStreamingQuality(quality);
     this.showToast('Streaming quality updated');
   }
 
-  async setDownloadQuality(quality: string) {
-    this.downloadQuality = quality;
-    await this.storageService.set('download_quality', quality);
+  /**
+   * Handle download quality change
+   */
+  async onSetDownload(quality: string) {
+    await this.settingsService.setDownloadQuality(quality);
     this.showToast('Download quality updated');
   }
 
-  async calculateCacheSize() {
-    // In a real app, this would calculate the actual cache size
-    // For demo purposes, we'll just use a placeholder value
-    this.cacheSize = '45 MB';
-  }
-
+  /**
+   * Clear app cache
+   */
   async clearCache() {
-    // In a real app, this would clear the cache
-    // For demo purposes, we'll just update the display
+    // Add actual cache clearing logic here if available
     this.cacheSize = '0 MB';
     this.showToast('Cache cleared');
   }
 
-  async showToast(message: string) {
-    const toast = await this.toastCtrl.create({
-      message,
+  /**
+   * Calculate current cache size
+   */
+  private calculateCacheSize() {
+    // Replace with real calculation if available
+    this.cacheSize = '45 MB';
+  }
+
+  /**
+   * Show toast message
+   */
+  private async showToast(msg: string) {
+    const toast = await this.toast.create({
+      message: msg,
       duration: 2000,
       position: 'bottom',
       color: 'primary'
     });
     await toast.present();
-  }
-
-  openEqualizer() {
-    // This would open an equalizer component in a real app
-    this.showToast('Equalizer not implemented in this demo');
-  }
-
-  signOut() {
-    // This would handle sign out in a real app
-    this.showToast('Sign out functionality not implemented in this demo');
   }
 }
