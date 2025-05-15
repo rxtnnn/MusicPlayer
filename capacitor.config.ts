@@ -1,13 +1,14 @@
+// capacitor.config.ts
+
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'io.ionic.starter',
-  appName: 'MusicPlayer',
+  appId: 'com.soundwave.app',      // match your Android package name
+  appName: 'Soundwave',
   webDir: 'www',
   server: {
-    // This makes Capacitor respond to com.soundwave:// URLs
-    androidScheme: 'com.soundwave',
-    iosScheme: 'com.soundwave'
+    androidScheme: 'https',
+    cleartext: true,
   }
 };
 

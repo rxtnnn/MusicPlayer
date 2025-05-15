@@ -1,3 +1,4 @@
+// src/app/services/audio.service.ts
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { StorageService } from './storage.service';
@@ -14,165 +15,134 @@ export interface Track {
   liked: boolean;
 }
 
-@Injectable({
-  providedIn: 'root'
-})
+@Injectable({ providedIn: 'root' })
 export class AudioService {
-  toggleLike(track: Track) {
-    throw new Error('Method not implemented.');
-  }
   private audio: HTMLAudioElement;
-  private currentTrack = new BehaviorSubject<Track | null>(null);
-  private isPlaying = new BehaviorSubject<boolean>(false);
-  private currentTime = new BehaviorSubject<number>(0);
-  private duration = new BehaviorSubject<number>(0);
+  private currentTrack$ = new BehaviorSubject<Track | null>(null);
+  private isPlaying$  = new BehaviorSubject<boolean>(false);
+  private currentTime$ = new BehaviorSubject<number>(0);
+  private duration$    = new BehaviorSubject<number>(0);
   private queue: Track[] = [];
   private queueIndex = 0;
   private timerId: any;
 
-  constructor(private storageService: StorageService) {
+  constructor(private storage: StorageService) {
     this.audio = new Audio();
     this.setupAudioEvents();
-    this.loadLastPlayedTrack();
+    this.restoreLastTrack();
   }
 
-  private setupAudioEvents() {
-    this.audio.addEventListener('timeupdate', () => {
-      this.currentTime.next(this.audio.currentTime);
-    });
-
-    this.audio.addEventListener('loadedmetadata', () => {
-      this.duration.next(this.audio.duration);
-    });
-
-    this.audio.addEventListener('ended', () => {
-      this.next();
-    });
-
-    this.audio.addEventListener('play', () => {
-      this.isPlaying.next(true);
-      this.startTimeUpdate();
-    });
-
-    this.audio.addEventListener('pause', () => {
-      this.isPlaying.next(false);
-      this.stopTimeUpdate();
-    });
+  private setupAudioEvents(): void {
+    this.audio.addEventListener('loadedmetadata', () => this.duration$.next(this.audio.duration));
+    this.audio.addEventListener('timeupdate', () => this.currentTime$.next(this.audio.currentTime));
+    this.audio.addEventListener('play', () => { this.isPlaying$.next(true); this.startUpdates(); });
+    this.audio.addEventListener('pause', () => { this.isPlaying$.next(false); this.stopUpdates(); });
+    this.audio.addEventListener('ended', () => this.next());
   }
 
-  private startTimeUpdate() {
-    this.timerId = setInterval(() => {
-      this.currentTime.next(this.audio.currentTime);
-    }, 1000);
+  private startUpdates(): void {
+    this.timerId = setInterval(() => this.currentTime$.next(this.audio.currentTime), 500);
   }
 
-  private stopTimeUpdate() {
+  private stopUpdates(): void {
     if (this.timerId) {
       clearInterval(this.timerId);
     }
   }
 
-  private async loadLastPlayedTrack() {
-    const lastTrack = await this.storageService.get('last_played_track');
-    if (lastTrack) {
-      this.currentTrack.next(lastTrack);
-      this.audio.src = lastTrack.previewUrl;
+  private async restoreLastTrack(): Promise<void> {
+    try {
+      const saved = await this.storage.get('last_played_track') as Track | null;
+      if (saved) {
+        this.currentTrack$.next(saved);
+        this.audio.src = saved.previewUrl;
+        this.audio.load();
+      }
+    } catch (err) {
+      console.error('[AudioService] restoreLastTrack error:', err);
     }
   }
 
-  private saveLastPlayedTrack(track: Track) {
-    this.storageService.set('last_played_track', track);
-  }
-  setCurrentTrack(track: Track): void {
-    this.currentTrack.next(track);
+  private saveLastTrack(track: Track): void {
+    this.storage.set('last_played_track', track);
   }
 
   play(track?: Track): void {
-  if (track) {
-    // Check if previewUrl exists and is a valid URL
-    if (!track.previewUrl || track.previewUrl === '' || track.previewUrl === 'undefined' || track.previewUrl === 'null') {
-      alert(`No preview available for "${track.title}"`);
-      return;
+    if (track) {
+      if (!track.previewUrl) {
+        alert(`No preview available for "${track.title}"`);
+        return;
+      }
+      this.currentTrack$.next(track);
+      this.audio.src = track.previewUrl;
+      this.audio.load();
+      this.saveLastTrack(track);
     }
-    this.currentTrack.next(track);
-    this.audio.src = track.previewUrl;
-    this.saveLastPlayedTrack(track);
+    this.audio.play().catch(e => {
+      console.error('Playback error:', e);
+      alert(`Unable to play track: ${e.message}`);
+    });
   }
-
-  this.audio.play().catch((error) => {
-    console.error('Playback error:', error);
-    alert(`Unable to play track: ${error.message}`);
-  });
-  }
-
 
   pause(): void {
     this.audio.pause();
   }
 
   togglePlay(): void {
-    if (!this.audio.paused) {
-      this.play();
-    } else {
-      this.pause();
-    }
+    this.audio.paused ? this.play() : this.pause();
   }
 
-  setQueue(tracks: Track[], startIndex: number = 0): void {
-    this.queue = [...tracks];
+  setQueue(tracks: Track[], startIndex = 0): void {
+    this.queue = tracks;
     this.queueIndex = startIndex;
-    if (this.queue.length > 0) {
-      this.play(this.queue[this.queueIndex]);
+    if (tracks.length) {
+      this.play(tracks[startIndex]);
     }
   }
 
   next(): void {
-    if (this.queue.length === 0) return;
-
+    if (!this.queue.length) return;
     this.queueIndex = (this.queueIndex + 1) % this.queue.length;
     this.play(this.queue[this.queueIndex]);
   }
 
   previous(): void {
-    if (this.queue.length === 0) return;
-
-    // If current time is more than 3 seconds, restart the track
+    if (!this.queue.length) return;
     if (this.audio.currentTime > 3) {
       this.audio.currentTime = 0;
-      return;
+    } else {
+      this.queueIndex = (this.queueIndex - 1 + this.queue.length) % this.queue.length;
+      this.play(this.queue[this.queueIndex]);
     }
-
-    this.queueIndex = (this.queueIndex - 1 + this.queue.length) % this.queue.length;
-    this.play(this.queue[this.queueIndex]);
   }
 
   seek(time: number): void {
-    if (this.audio) {
-      this.audio.currentTime = time;
+    this.audio.currentTime = time;
+  }
+
+  async toggleLike(track: Track): Promise<void> {
+    if (track.liked) {
+      await this.storage.removeLiked(track.id);
+    } else {
+      await this.storage.addLiked(track.id);
     }
+    track.liked = !track.liked;
   }
 
-  getCurrentTrack(): Observable<Track | null> {
-    return this.currentTrack.asObservable();
+  /**
+   * Download a track locally and return its URI. Stub implementation.
+   */
+  async downloadTrack(track: Track): Promise<string> {
+    // TODO: Replace stub with actual download logic
+    const uri = track.previewUrl;
+    return uri;
   }
 
-  getIsPlaying(): Observable<boolean> {
-    return this.isPlaying.asObservable();
-  }
-
-  getCurrentTime(): Observable<number> {
-    return this.currentTime.asObservable();
-  }
-
-  getDuration(): Observable<number> {
-    return this.duration.asObservable();
-  }
-
-  getQueue(): Track[] {
-    return [...this.queue];
-  }
-
-  getCurrentQueueIndex(): number {
-    return this.queueIndex;
-  }
+  // Observables for UI binding
+  getCurrentTrack(): Observable<Track|null> { return this.currentTrack$.asObservable(); }
+  getIsPlaying():   Observable<boolean>   { return this.isPlaying$.asObservable(); }
+  getCurrentTime(): Observable<number>    { return this.currentTime$.asObservable(); }
+  getDuration():    Observable<number>    { return this.duration$.asObservable(); }
+  getQueue():       Track[]               { return this.queue; }
+  getQueueIndex():  number                { return this.queueIndex; }
 }

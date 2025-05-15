@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
-
+import { App } from '@capacitor/app';
+import { Platform } from '@ionic/angular';
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
@@ -7,12 +8,19 @@ import { Component } from '@angular/core';
   standalone: false
 })
 export class AppComponent {
-  darkMode = false;
-
-  constructor() {}
-
-  toggleDarkTheme() {
-    this.darkMode = !this.darkMode;
-    document.body.classList.toggle('dark', this.darkMode);
+  constructor(private platform: Platform) {
+    this.platform.ready().then(() => {
+      App.addListener('appUrlOpen', (data: { url: string }) => {
+        // e.g. data.url === 'capacitor://localhost/callback?code=…'
+        if (data.url.startsWith('capacitor://localhost/callback')) {
+          // parse out the code
+          const [, queryString] = data.url.split('?');
+          const params = new URLSearchParams(queryString);
+          const code = params.get('code');
+          // now exchange code for a token…
+          console.log('OAuth code:', code);
+        }
+      });
+    });
   }
 }

@@ -1,14 +1,15 @@
 import { Component, OnInit } from '@angular/core';
-import { AlertController } from '@ionic/angular';
-import { AudioService, Track } from '../services/audio.service';
-import { StorageService } from '../services/storage.service';
-import { ThemeService } from '../services/theme.service';
-import { Observable } from 'rxjs';
+import { AlertController }      from '@ionic/angular';
+import { AudioService, Track }  from '../services/audio.service';
+import { StorageService }       from '../services/storage.service';
+import { ThemeService }         from '../services/theme.service';
+import { Observable }           from 'rxjs';
 
 interface Playlist {
   id: number;
   name: string;
   created_at: string;
+  updated_at?: string;
   trackCount?: number;
 }
 
@@ -21,103 +22,120 @@ interface Playlist {
 export class PlaylistsPage implements OnInit {
   playlists: Playlist[] = [];
   likedTracks: Track[] = [];
+  downloaded: any[]         = [];
   selectedPlaylist: Playlist | null = null;
-  playlistTracks: Track[] = [];
+  playlistTracks: Track[]   = [];
   isDarkMode: Observable<boolean>;
 
   constructor(
-    private audioService: AudioService,
-    private storageService: StorageService,
-    private themeService: ThemeService,
+    private audio: AudioService,
+    private storage: StorageService,
+    private theme: ThemeService,
     private alertCtrl: AlertController
   ) {
-    this.isDarkMode = this.themeService.isDarkMode();
+    this.isDarkMode = this.theme.isDarkMode();
   }
 
   async ngOnInit() {
-    await this.loadPlaylists();
-    await this.loadLikedTracks();
+    await this.storage.init();
+    await this.refreshAll();
   }
 
   ionViewWillEnter() {
-    this.loadPlaylists();
-    this.loadLikedTracks();
+    this.refreshAll();
   }
 
-  async loadPlaylists() {
-    const playlists = await this.storageService.getPlaylists();
+  private async refreshAll() {
+  // 1) All user-created playlists
+  const raw = await this.storage.getPlaylists();
+  this.playlists = await Promise.all(
+    raw.map(async p => {
+      const tracks = await this.storage.getPlaylistTracks(p.id);
+      return { ...p, trackCount: tracks.length };
+    })
+  );
 
-    for (const playlist of playlists) {
-      const tracks = await this.storageService.getPlaylistTracks(playlist.id);
-      playlist.trackCount = tracks.length;
-    }
+  // 2) All liked tracks (IDs or full Track[] per your service)
+  this.likedTracks = await this.storage.getLikedTracks();
 
-    this.playlists = playlists;
+  // 3) Downloaded list
+  this.downloaded = await this.storage.getDownloadedTracks();
+
+  // 4) If detail open, reload its tracks
+  if (this.selectedPlaylist && this.selectedPlaylist.id !== -1) {
+    this.playlistTracks = await this.storage.getPlaylistTracks(
+      this.selectedPlaylist.id
+    );
+  }
   }
 
-  async loadLikedTracks() {
-    this.likedTracks = await this.storageService.getLikedTracks();
-  }
 
   async createPlaylist() {
     const alert = await this.alertCtrl.create({
       header: 'New Playlist',
-      inputs: [
-        {
-          name: 'name',
-          type: 'text',
-          placeholder: 'Playlist Name'
-        }
-      ],
+      inputs: [{ name: 'name', placeholder: 'Name' }],
       buttons: [
-        {
-          text: 'Cancel',
-          role: 'cancel'
-        },
+        { text: 'Cancel', role: 'cancel' },
         {
           text: 'Create',
-          handler: async (data) => {
-            if (data.name.trim()) {
-              await this.storageService.createPlaylist(data.name);
-              this.loadPlaylists();
-            }
+          handler: async data => {
+            const name = (data.name || '').trim();
+            if (!name) return false;
+            await this.storage.createPlaylist(name);
+            await this.refreshAll();
+            return true;
           }
         }
       ]
     });
-
     await alert.present();
   }
 
-  selectPlaylist(playlist: Playlist) {
-    this.selectedPlaylist = playlist;
-    this.loadPlaylistTracks(playlist.id);
+  selectPlaylist(pl: Playlist) {
+    this.selectedPlaylist = pl;
+    this.loadPlaylistTracks(pl.id);
   }
 
-  async loadPlaylistTracks(playlistId: number) {
-    this.playlistTracks = await this.storageService.getPlaylistTracks(playlistId);
-  }
-
-  playTrack(track: Track) {
-    this.audioService.play(track);
-  }
-
-  playPlaylist(tracks: Track[]) {
-    if (tracks.length > 0) {
-      this.audioService.setQueue(tracks);
-    }
+  private async loadPlaylistTracks(id: number) {
+    this.playlistTracks = await this.storage.getPlaylistTracks(id);
   }
 
   async toggleLike(track: Track) {
-    const newLikedState = !track.liked;
-    await this.storageService.toggleLikedTrack(track.id, newLikedState);
-    track.liked = newLikedState;
-    if (!this.selectedPlaylist) {
-      this.loadLikedTracks();
+    if (track.liked) {
+      await this.storage.removeLiked(track.id);
+    } else {
+      await this.storage.addLiked(track.id);
     }
+    // refresh status
+    this.likedTracks = await this.storage.getLikedTracks();
   }
 
-  backToPlaylists() {
+  async toggleDownload(track: Track) {
+    const isDownloaded = this.downloaded.some(d => d.track_id === track.id);
+    if (isDownloaded) {
+      await this.storage.removeDownloaded(track.id);
+    } else {
+      // user-supplied URI needed here:
+      const uri = await this.audio.downloadTrack(track);
+      await this.storage.addDownloaded(track.id, uri);
+    }
+    this.downloaded = await this.storage.getDownloadedTracks();
+  }
+
+  playTrack(track: Track) {
+    this.audio.play(track);
+  }
+
+  playPlaylist() {
+    const tracks =
+      this.selectedPlaylist?.id === -1
+        ? this.likedTracks
+        : this.playlistTracks;
+    this.audio.setQueue(tracks);
+  }
+
+  backToList() {
     this.selectedPlaylist = null;
+    this.playlistTracks = [];
   }
 }

@@ -1,15 +1,27 @@
-import { Component, OnInit } from '@angular/core';
+// src/app/home/home.page.ts
+
+import {
+  Component,
+  OnInit,
+  ViewChild,
+  ElementRef,
+} from '@angular/core';
 import { Router } from '@angular/router';
-import { LoadingController, AlertController } from '@ionic/angular';
+import {
+  LoadingController,
+  AlertController,
+} from '@ionic/angular';
 import { MusicService } from '../services/music.service';
 import { AudioService, Track } from '../services/audio.service';
+import { StorageService } from '../services/storage.service';
 import { ThemeService } from '../services/theme.service';
-import { firstValueFrom, Observable } from 'rxjs';
+import { firstValueFrom, of } from 'rxjs';
+import { map, catchError } from 'rxjs/operators';
 
 interface SpotifyCategory {
   id: string;
   name: string;
-  icons?: {url: string}[];
+  icons?: { url: string }[];
   href?: string;
 }
 
@@ -20,13 +32,23 @@ interface SpotifyCategory {
   standalone: false
 })
 export class HomePage implements OnInit {
+  @ViewChild('searchInput', { read: ElementRef }) searchInput!: ElementRef;
+
+  // Search bar state
+  searchActive = false;
+  searchQuery = '';
+  searchResults: Track[] = [];
+
+  // Core data
   categories: SpotifyCategory[] = [];
   newReleases: Track[] = [];
   featuredPlaylists: any[] = [];
+  recommendedTracks: Track[] = [];
   selectedCategory = 'all';
-  isDarkMode: Observable<boolean>;
+
+  // UI state
+  isDarkMode = this.themeService.isDarkMode();
   isLoading = false;
-  debugInfo = '';
 
   constructor(
     private musicService: MusicService,
@@ -34,195 +56,207 @@ export class HomePage implements OnInit {
     private themeService: ThemeService,
     private router: Router,
     private loadingCtrl: LoadingController,
-    private alertController: AlertController
-  ) {
-    this.isDarkMode = this.themeService.isDarkMode();
-  }
+    private alertController: AlertController,
+    private storageService: StorageService
+  ) {}
 
   async ngOnInit() {
     await this.loadInitialData();
   }
 
-  async loadInitialData() {
-    const loading = await this.loadingCtrl.create({
-      message: 'Loading music...'
-    });
-
-    this.isLoading = true;
-    await loading.present();
-
-    try {
-      // Authenticate first
-      console.log('Starting authentication...');
-      const authSuccess = await firstValueFrom(this.musicService.authenticate());
-      if (!authSuccess) {
-        throw new Error('Authentication failed');
-      }
-      console.log('Authentication successful');
-
-      // Load data in parallel
-      console.log('Loading categories, new releases, and featured playlists...');
-      const [ categoriesData, newRelData, playlists ] = await Promise.all([
-        firstValueFrom(this.musicService.getGenres()),
-        firstValueFrom(this.musicService.getNewReleases()),
-        firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
-      ]);
-
-      // Process categories data
-      this.categories = categoriesData.categories.items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        icons: item.icons
-      }));
-
-      // Log available categories for debugging
-      this.debugInfo = `Available categories: ${this.categories.map(c => c.name).join(', ')}`;
-      console.log(this.debugInfo);
-      console.log('Category IDs:', this.categories.map(c => c.id));
-
-      // Process new releases and playlists
-      this.newReleases = newRelData.albums.items.map((item: any) => this.mapSpotifyTrack(item));
-      this.featuredPlaylists = playlists;
-
-      console.log(`Loaded ${this.categories.length} categories, ${this.newReleases.length} new releases, and ${this.featuredPlaylists.length} featured playlists`);
-    } catch (err) {
-      console.error('Error loading initial data', err);
-      await this.showErrorAlert('Failed to load music data. Please try again.');
-    } finally {
-      this.isLoading = false;
-      await loading.dismiss();
+  /** Toggle animated search bar open/close */
+  toggleSearch() {
+    this.searchActive = !this.searchActive;
+    if (this.searchActive) {
+      // focus the input after the container becomes visible
+      setTimeout(() => this.searchInput.nativeElement.focus(), 200);
+    } else {
+      this.clearSearch();
     }
   }
 
-  async selectCategory(categoryId: string) {
-    this.selectedCategory = categoryId;
-    const loading = await this.loadingCtrl.create({
-      message: 'Loading playlists…'
-    });
-    await loading.present();
+  /** Called on every search input change */
+  onSearch() {
+    const q = this.searchQuery.trim();
+    if (!q) {
+      this.searchResults = [];
+      return;
+    }
+    this.musicService
+      .searchTracks(q, 20)
+      .pipe(
+        map((res) =>
+          res.tracks.items.map((i: any) => this.mapSpotifyTrack(i))
+        ),
+        catchError((err) => {
+          console.error('Search error', err);
+          return of<Track[]>([]);
+        })
+      )
+      .subscribe((tracks) => (this.searchResults = tracks));
+  }
 
-    try {
-      const playlists = await firstValueFrom(
-        this.musicService.getPlaylistsByGenre(categoryId)
-      );
-      console.log(`playlists for ${categoryId}:`, playlists);
-      this.featuredPlaylists = playlists;
-      if (playlists.length === 0) {
-        const name = this.categories.find(c => c.id === categoryId)?.name || categoryId;
-        await this.showErrorAlert(`No playlists found for “${name}”.`);
-      }
-    } catch (err) {
-      console.error('Error selecting category', err);
-      await this.showErrorAlert('Failed to load playlists.');
-    } finally {
-      await loading.dismiss();
+  /** When user focuses the <input> */
+  onSearchFocus() {
+    // you can use this to animate placeholder/title if desired
+  }
+
+  /** When user blurs the <input> */
+  onSearchBlur() {
+    // optionally hide results if query is empty
+    if (!this.searchQuery) {
+      this.searchResults = [];
     }
   }
 
-  async showErrorAlert(message: string) {
-    const alert = await this.alertController.create({
-      header: 'Notice',
-      message: message,
-      buttons: ['OK']
-    });
-
-    await alert.present();
+  /** Clear search query and results */
+  clearSearch() {
+    this.searchQuery = '';
+    this.searchResults = [];
   }
 
+  /** Play a single track */
   playTrack(track: Track) {
-    this.audioService.setCurrentTrack(track);
+    this.audioService.play(track);
     this.router.navigate(['/now-playing']);
   }
 
+  /** Fetch and play all tracks in a playlist */
   playPlaylist(playlistId: string) {
-    console.log(`Playing playlist: ${playlistId}`);
-    this.musicService.getPlaylistTracks(playlistId).subscribe({
-      next: (data) => {
-        if (!Array.isArray(data)) {
-          console.error('Expected array of tracks but got:', data);
-          this.showErrorAlert('Failed to parse playlist tracks.');
-          return;
-        }
-
-        const tracks = data.map((item: any) => {
-          if (!item.track) {
-            console.warn('Track item missing track property:', item);
-            return null;
-          }
-          return this.mapSpotifyTrack(item.track);
-        }).filter(track => track !== null) as Track[];
-
-        console.log(`Mapped ${tracks.length} valid tracks from playlist`);
-
-        if (tracks.length > 0) {
+    this.musicService
+      .getPlaylistTracks(playlistId)
+      .pipe(
+        map((items: any[]) =>
+          items
+            .map((i) => i.track)
+            .filter(Boolean)
+            .map((t) => this.mapSpotifyTrack(t))
+        ),
+        catchError((err) => {
+          console.error('Playlist load error', err);
+          this.showError('Could not load playlist.');
+          return of<Track[]>([]);
+        })
+      )
+      .subscribe((tracks) => {
+        if (tracks.length) {
           this.audioService.setQueue(tracks);
           this.router.navigate(['/now-playing']);
         } else {
-          this.showErrorAlert('No playable tracks found in this playlist.');
+          this.showError('No playable tracks in this playlist.');
         }
-      },
-      error: (err) => {
-        console.error('Error loading playlist tracks', err);
-        this.showErrorAlert('Failed to load playlist tracks.');
-      }
+      });
+  }
+
+  /** Change featured playlist category */
+  async selectCategory(categoryId: string) {
+    this.selectedCategory = categoryId;
+    const loading = await this.loadingCtrl.create({
+      message: 'Loading playlists…',
     });
-  }
-
-  private mapSpotifyTrack(item: any): Track {
-    if (!item) {
-      console.warn('Attempted to map null or undefined item to track');
-      return this.createEmptyTrack();
-    }
-
+    await loading.present();
     try {
-      let imageUrl = '';
-      if (item.images?.length) {
-        imageUrl = item.images[0].url;
-      } else if (item.album?.images?.length) {
-        imageUrl = item.album.images[0].url;
+      this.featuredPlaylists = await firstValueFrom(
+        this.musicService.getPlaylistsByGenre(categoryId)
+      );
+      if (!this.featuredPlaylists.length) {
+        this.showError(`No playlists found for "${categoryId}".`);
       }
-
-      return {
-        id: item.id || `local-${Date.now()}`,
-        title: item.name || 'Unknown Title',
-        artist: Array.isArray(item.artists)
-          ? item.artists.map((a: any) => a.name).join(', ')
-          : 'Unknown Artist',
-        album: item.album?.name || 'Unknown Album',
-        duration: item.duration_ms ? item.duration_ms / 1000 : 0,
-        imageUrl: imageUrl || 'assets/default-album-art.png',
-        previewUrl: item.preview_url || '',
-        spotifyId: item.id || '',
-        liked: false
-      };
-    } catch (error) {
-      console.error('Error mapping track:', error, item);
-      return this.createEmptyTrack();
+    } catch {
+      this.showError('Failed to load playlists.');
+    } finally {
+      loading.dismiss();
     }
   }
 
-  private createEmptyTrack(): Track {
-    return {
-      id: `empty-${Date.now()}`,
-      title: 'Unknown Track',
-      artist: 'Unknown Artist',
-      album: 'Unknown Album',
+  /** Handle local audio file upload */
+  onFileSelected(event: any) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const track: Track = {
+      id: `local-${Date.now()}`,
+      title: file.name,
+      artist: 'Local File',
+      album: 'Local Files',
       duration: 0,
       imageUrl: 'assets/default-album-art.png',
-      previewUrl: '',
+      previewUrl: url,
       spotifyId: '',
-      liked: false
+      liked: false,
+    };
+    this.storageService.saveTrack(track);
+    this.newReleases.unshift(track);
+  }
+
+  /** Initial data load: auth, genres, releases, playlists */
+  private async loadInitialData() {
+    const loading = await this.loadingCtrl.create({
+      message: 'Loading music...',
+    });
+    await loading.present();
+    this.isLoading = true;
+    try {
+      const authOk = await firstValueFrom(
+        this.musicService.authenticate()
+      );
+      if (!authOk) throw new Error('Spotify authentication failed');
+
+      const [cats, newRel, playlists] = await Promise.all([
+        firstValueFrom(this.musicService.getGenres()),
+        firstValueFrom(this.musicService.getNewReleases()),
+        firstValueFrom(
+          this.musicService.getPlaylistsByGenre(this.selectedCategory)
+        ),
+      ]);
+
+      this.categories = cats.categories.items.map((i: any) => ({
+        id: i.id,
+        name: i.name,
+        icons: i.icons,
+        href: i.href,
+      }));
+      this.newReleases = newRel.albums.items.map((i: any) =>
+        this.mapSpotifyTrack(i)
+      );
+      this.featuredPlaylists = playlists;
+      this.recommendedTracks = [...this.newReleases];
+    } catch (err) {
+      console.error('Data load error', err);
+      await this.showError('Failed loading initial data.');
+    } finally {
+      this.isLoading = false;
+      loading.dismiss();
+    }
+  }
+
+  /** Convert raw Spotify item to our Track model */
+  private mapSpotifyTrack(item: any): Track {
+    return {
+      id: item.id || `track-${Date.now()}`,
+      title: item.name,
+      artist: Array.isArray(item.artists)
+        ? item.artists.map((a: any) => a.name).join(', ')
+        : 'Unknown Artist',
+      album: item.album?.name || 'Unknown Album',
+      duration: (item.duration_ms ?? item.duration) / 1000,
+      imageUrl:
+        item.images?.[0]?.url ||
+        item.album?.images?.[0]?.url ||
+        'assets/default-album-art.png',
+      previewUrl: item.preview_url || '',
+      spotifyId: item.id || '',
+      liked: false,
     };
   }
 
-  // Refresh method to reload data
-  async refreshData(event?: any) {
-    try {
-      await this.loadInitialData();
-      if (event) event.target.complete();
-    } catch (err) {
-      console.error('Error refreshing data', err);
-      if (event) event.target.complete();
-    }
+  /** Display a simple alert */
+  private async showError(message: string) {
+    const alert = await this.alertController.create({
+      header: 'Notice',
+      message,
+      buttons: ['OK'],
+    });
+    await alert.present();
   }
 }

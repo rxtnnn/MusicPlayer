@@ -1,109 +1,242 @@
 <ion-header [translucent]="true" [class.dark-mode]="(isDarkMode | async)">
-  <ion-toolbar>Soundwave
-    <ion-buttons slot="end">
-      <ion-button>
-        <fa-icon [icon]="['fas', 'search']" size="lg"></fa-icon>
-      </ion-button>
-      <ion-button>
-        <fa-icon [icon]="['fas', 'microphone']" size="lg"></fa-icon>
-      </ion-button>
-    </ion-buttons>
+  <ion-toolbar>
+    <div class="toolbar-container">
+      <!-- Logo/App Name -->
+      <div class="app-branding">
+        <fa-icon [icon]="['fas', 'headphones']" class="app-logo"></fa-icon>
+        <span class="app-name">Soundwave</span>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="toolbar-actions">
+        <ion-button fill="none" class="icon-btn" (click)="toggleSearch()">
+          <fa-icon [icon]="['fas', searchActive ? 'close' : 'search']"></fa-icon>
+        </ion-button>
+      </div>
+    </div>
+
+    <!-- Animated Search Bar -->
+    <div class="search-bar-container" [class.active]="searchActive">
+      <div class="search-input-wrapper">
+        <fa-icon [icon]="['fas', 'search']" class="search-icon"></fa-icon>
+        <input
+          type="text"
+          placeholder="Search artist, song or album"
+          [(ngModel)]="searchQuery"
+          (ngModelChange)="onSearch()"
+          (focus)="onSearchFocus()"
+          (blur)="onSearchBlur()"
+          class="search-input"
+          #searchInput
+        />
+        <ion-button fill="none" size="small" *ngIf="searchQuery" (click)="clearSearch()">
+          <fa-icon [icon]="['fas', 'times']"></fa-icon>
+        </ion-button>
+      </div>
+    </div>
   </ion-toolbar>
 </ion-header>
 
 <ion-content [fullscreen]="true" [class.dark-mode]="(isDarkMode | async)">
-  <!-- Genre Selector -->
-  <div class="genre-scroll-container">
-    <div class="genre-item"
-         [class.active]="selectedCategory === 'all'"
-         (click)="selectCategory('all')">
-      All
-    </div>
-    <div *ngFor="let category of categories"
-         class="genre-item"
-         [class.active]="selectedCategory === category.id"
-         (click)="selectCategory(category.id)">
-      {{category.name}}
-    </div>
-  </div>
+  <!-- Search Results Container -->
+  <div class="search-results-container" *ngIf="searchActive && searchQuery" [class.has-results]="searchResults.length > 0">
+    <div class="search-results-content">
+      <!-- Results Count -->
+      <div class="results-header" *ngIf="searchResults.length > 0">
+        <h3>{{ searchResults.length }} results for "{{ searchQuery }}"</h3>
+      </div>
 
-  <!-- Recent Releases Section -->
-  <div class="section-header">
-    <h2>New Releases</h2>
-    <ion-button fill="clear" size="small">See All</ion-button>
-  </div>
-
-  <div class="horizontal-scroll-container">
-    <div *ngFor="let track of newReleases" class="music-card" (click)="playTrack(track)">
-      <div class="album-art-container">
-      <img [src]="track.imageUrl || 'assets/default-album-art.png'" [alt]="track.title" class="album-art">
-        <div class="play-overlay">
-          <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+      <!-- Results Grid -->
+      <div class="results-grid" *ngIf="searchResults.length > 0">
+        <div class="result-card" *ngFor="let track of searchResults" (click)="playTrack(track)">
+          <div class="result-image">
+            <img [src]="track.imageUrl || 'assets/placeholder.png'" [alt]="track.title">
+            <div class="play-button">
+              <fa-icon [icon]="['fas', 'play']"></fa-icon>
+            </div>
+          </div>
+          <div class="result-info">
+            <h4>{{ track.title }}</h4>
+            <p>{{ track.artist }}</p>
+            <span class="album">{{ track.album }}</span>
+          </div>
         </div>
       </div>
-      <div class="track-info">
-        <h3 class="track-title">{{track.title}}</h3>
-        <p class="track-artist">{{track.artist}}</p>
+
+      <!-- No Results -->
+      <div class="no-results" *ngIf="searchQuery.length > 2 && searchResults.length === 0">
+        <div class="no-results-icon">
+          <fa-icon [icon]="['fas', 'search']"></fa-icon>
+        </div>
+        <h3>No results found</h3>
+        <p>Try searching with different keywords</p>
       </div>
     </div>
   </div>
 
-  <!-- Featured Playlists -->
-  <div class="section-header">
-    <h2>Featured Playlists</h2>
-    <ion-button fill="clear" size="small">See All</ion-button>
-  </div>
+  <!-- Main Content -->
+  <div class="main-content" [class.dimmed]="searchActive">
+    <!-- Genre Selector -->
+    <div class="genre-scroll-container">
+      <div
+        class="genre-item"
+        [class.active]="selectedCategory === 'all'"
+        (click)="selectCategory('all')"
+      >
+        All
+      </div>
+      <div
+        *ngFor="let category of categories"
+        class="genre-item"
+        [class.active]="selectedCategory === category.id"
+        (click)="selectCategory(category.id)"
+      >
+        {{ category.name }}
+      </div>
+    </div>
 
-  <div class="horizontal-scroll-container">
-    <div *ngFor="let playlist of featuredPlaylists" class="playlist-card" (click)="playPlaylist(playlist.id)">
-      <div class="album-art-container">
-        <img [src]="playlist.images[0]?.url || 'assets/placeholder.png'" [alt]="playlist.name" class="album-art">
-        <div class="play-overlay">
-          <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+    <!-- Add Local Track Section -->
+    <div class="add-local-track-section">
+      <div class="local-track-card">
+        <div class="card-content">
+          <div class="icon-container">
+            <fa-icon [icon]="['fas', 'music']" size="2x"></fa-icon>
+          </div>
+          <div class="text-content">
+            <h3>Add Your Music</h3>
+            <p>Upload tracks from your device</p>
+          </div>
+          <div class="upload-button-wrapper">
+            <ion-button fill="solid" shape="round" size="small">
+              <ion-icon name="add" slot="icon-only"></ion-icon>
+            </ion-button>
+            <input
+              #fileInput
+              type="file"
+              accept="audio/*"
+              (change)="onFileSelected($event)"
+            />
+          </div>
         </div>
       </div>
-      <div class="playlist-info">
-        <h3 class="playlist-title">{{playlist.name}}</h3>
-        <p class="playlist-description">{{playlist.description}}</p>
-      </div>
     </div>
-  </div>
 
-  <!-- Recommended Tracks -->
-  <div class="section-header">
-    <h2>Recommended For You</h2>
-    <ion-button fill="clear" size="small">See All</ion-button>
-  </div>
-
-  <div class="track-list">
-    <div *ngFor="let track of newReleases" class="track-item" (click)="playTrack(track)">
-      <div class="track-item-left">
-        <img [src]="track.imageUrl || 'assets/placeholder.png'" [alt]="track.title" class="track-thumbnail">
-        <div class="track-details">
-          <h3 class="track-item-title">{{track.title}}</h3>
-          <p class="track-item-artist">{{track.artist}}</p>
+    <!-- New Releases -->
+    <div class="section-header">
+      <h2>New Releases</h2>
+      <ion-button fill="clear" size="small">See All</ion-button>
+    </div>
+    <div class="horizontal-scroll-container">
+      <div
+        *ngFor="let track of newReleases"
+        class="music-card"
+        (click)="playTrack(track)"
+      >
+        <div class="album-art-container">
+          <img
+            [src]="track.imageUrl || 'assets/default-album-art.png'"
+            [alt]="track.title"
+            class="album-art"
+          />
+          <div class="play-overlay">
+            <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+          </div>
+        </div>
+        <div class="track-info">
+          <h3 class="track-title">{{ track.title }}</h3>
+          <p class="track-artist">{{ track.artist }}</p>
         </div>
       </div>
-      <div class="track-item-right">
-        <fa-icon [icon]="['fas', 'heart']" [ngClass]="{'liked': track.liked}"></fa-icon>
+    </div>
+
+    <!-- Featured Playlists -->
+    <div class="section-header">
+      <h2>Featured Playlists</h2>
+      <ion-button fill="clear" size="small">See All</ion-button>
+    </div>
+    <div class="horizontal-scroll-container">
+      <div
+        *ngFor="let playlist of featuredPlaylists"
+        class="playlist-card"
+        (click)="playPlaylist(playlist.id)"
+      >
+        <div class="album-art-container">
+          <img
+            [src]="playlist.images[0]?.url || 'assets/placeholder.png'"
+            [alt]="playlist.name"
+            class="album-art"
+          />
+          <div class="play-overlay">
+            <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+          </div>
+        </div>
+        <div class="playlist-info">
+          <h3 class="playlist-title">{{ playlist.name }}</h3>
+          <p class="playlist-description">{{ playlist.description }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recommended For You -->
+    <div class="section-header">
+      <h2>Recommended For You</h2>
+      <ion-button fill="clear" size="small">See All</ion-button>
+    </div>
+    <div class="track-list">
+      <div
+        *ngFor="let track of recommendedTracks"
+        class="track-item"
+        (click)="playTrack(track)"
+      >
+        <div class="track-item-left">
+          <img
+            [src]="track.imageUrl || 'assets/placeholder.png'"
+            [alt]="track.title"
+            class="track-thumbnail"
+          />
+          <div class="track-details">
+            <h3 class="track-item-title">{{ track.title }}</h3>
+            <p class="track-item-artist">{{ track.artist }}</p>
+          </div>
+        </div>
+        <div class="track-item-right">
+          <fa-icon
+            [icon]="['fas', 'heart']"
+            [ngClass]="{ liked: track.liked }"
+          ></fa-icon>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Mini Player (if song is playing) -->
-  <div class="mini-player" *ngIf="(audioService.getCurrentTrack() | async) as currentTrack">
+  <!-- Mini Player -->
+  <div
+    class="mini-player"
+    *ngIf="(audioService.getCurrentTrack() | async) as currentTrack"
+  >
     <div class="mini-player-left" [routerLink]="['/now-playing']">
-      <img [src]="currentTrack.imageUrl || 'assets/placeholder.png'" class="mini-player-thumbnail">
+      <img
+        [src]="currentTrack.imageUrl || 'assets/placeholder.png'"
+        class="mini-player-thumbnail"
+      />
       <div class="mini-player-info">
-        <h4 class="mini-player-title">{{currentTrack.title}}</h4>
-        <p class="mini-player-artist">{{currentTrack.artist}}</p>
+        <h4 class="mini-player-title">{{ currentTrack.title }}</h4>
+        <p class="mini-player-artist">{{ currentTrack.artist }}</p>
       </div>
     </div>
     <div class="mini-player-controls">
-      <fa-icon [icon]="['fas', 'step-backward']" (click)="audioService.previous()"></fa-icon>
-      <fa-icon [icon]="(audioService.getIsPlaying() | async) ? ['fas', 'pause'] : ['fas', 'play']"
-               (click)="audioService.togglePlay()"></fa-icon>
-      <fa-icon [icon]="['fas', 'step-forward']" (click)="audioService.next()"></fa-icon>
+      <fa-icon
+        [icon]="['fas', 'step-backward']"
+        (click)="audioService.previous()"
+      ></fa-icon>
+      <fa-icon
+        [icon]="(audioService.getIsPlaying() | async) ? ['fas', 'pause'] : ['fas', 'play']"
+        (click)="audioService.togglePlay()"
+      ></fa-icon>
+      <fa-icon
+        [icon]="['fas', 'step-forward']"
+        (click)="audioService.next()"
+      ></fa-icon>
     </div>
   </div>
 </ion-content>

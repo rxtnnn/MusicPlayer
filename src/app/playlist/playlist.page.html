@@ -1,108 +1,118 @@
 <ion-header [translucent]="true" [class.dark-mode]="(isDarkMode | async)">
   <ion-toolbar>
-    Your Playlists
+    <ion-buttons slot="start" *ngIf="selectedPlaylist">
+      <ion-button fill="clear" (click)="backToList()">
+        <fa-icon [icon]="['fas','chevron-left']"></fa-icon>
+      </ion-button>
+    </ion-buttons>
     <ion-title>
-        <ng-container *ngIf="selectedPlaylist">
-          <ion-button fill="clear" (click)="backToPlaylists()">
-            <fa-icon [icon]="['fas', 'chevron-left']"></fa-icon>
-          </ion-button>
-          {{selectedPlaylist.name}}
-        </ng-container>
+      <ng-container *ngIf="selectedPlaylist; else allTitle">
+        {{ selectedPlaylist.name }}
+      </ng-container>
+      <ng-template #allTitle>
+        Your Playlists
+      </ng-template>
     </ion-title>
   </ion-toolbar>
 </ion-header>
 
 <ion-content [class.dark-mode]="(isDarkMode | async)" class="play-container">
   <!-- Playlist List View -->
-  <div *ngIf="!selectedPlaylist">
-    <!-- Liked Songs -->
-    <div class="liked-songs-card" (click)="selectPlaylist({id: -1, name: 'Liked Music', created_at: ''})">
+  <ng-container *ngIf="!selectedPlaylist">
+    <!-- Liked Songs Card -->
+    <div class="liked-songs-card"
+         (click)="selectPlaylist({id: -1, name: 'Liked Music', created_at: ''})">
       <div class="liked-songs-gradient">
-        <fa-icon [icon]="['fas', 'heart']" size="lg"></fa-icon>
+        <fa-icon [icon]="['fas','heart']" size="lg"></fa-icon>
       </div>
       <div class="liked-songs-info">
         <h2>Liked Music</h2>
-        <p>{{likedTracks.length}} songs</p>
+        <p>{{ likedTracks.length }} songs</p>
       </div>
     </div>
 
-    <!-- User Playlists -->
+    <!-- User Playlists Grid -->
     <div class="playlists-grid">
-      <div *ngFor="let playlist of playlists" class="playlist-card" (click)="selectPlaylist(playlist)">
+      <div *ngFor="let playlist of playlists"
+           class="playlist-card"
+           (click)="selectPlaylist(playlist)">
         <div class="playlist-card-art">
-          <fa-icon [icon]="['fas', 'music']" size="lg"></fa-icon>
+          <fa-icon [icon]="['fas','music']" size="lg"></fa-icon>
         </div>
-        <h3>{{playlist.name}}</h3>
-        <p>{{playlist.trackCount || 0}} songs</p>
+        <h3>{{ playlist.name }}</h3>
+        <p>{{ playlist.trackCount || 0 }} songs</p>
       </div>
 
       <!-- Create Playlist Button -->
       <div class="create-playlist-card" (click)="createPlaylist()">
         <div class="create-playlist-button">
-          <fa-icon [icon]="['fas', 'plus']" size="lg"></fa-icon>
+          <fa-icon [icon]="['fas','plus']" size="lg"></fa-icon>
         </div>
         <h3>Create Playlist</h3>
       </div>
     </div>
-  </div>
+  </ng-container>
 
   <!-- Playlist Detail View -->
-  <div *ngIf="selectedPlaylist" class="playlist-detail">
-    <!-- Playlist Header -->
+  <ng-container *ngIf="selectedPlaylist">
     <div class="playlist-header">
       <div [class.playlist-gradient]="selectedPlaylist.id === -1"
            [class.playlist-art]="selectedPlaylist.id !== -1">
-        <fa-icon *ngIf="selectedPlaylist.id === -1" [icon]="['fas', 'heart']" size="3x"></fa-icon>
-        <fa-icon *ngIf="selectedPlaylist.id !== -1" [icon]="['fas', 'music']" size="3x"></fa-icon>
+        <fa-icon *ngIf="selectedPlaylist.id === -1"
+                 [icon]="['fas','heart']" size="3x"></fa-icon>
+        <fa-icon *ngIf="selectedPlaylist.id !== -1"
+                 [icon]="['fas','music']" size="3x"></fa-icon>
       </div>
-
       <div class="playlist-header-info">
-        <h1>{{selectedPlaylist.name}}</h1>
+        <h1>{{ selectedPlaylist.name }}</h1>
         <p>
-          <ng-container *ngIf="selectedPlaylist.id === -1">
-            {{likedTracks.length}} songs
-          </ng-container>
-          <ng-container *ngIf="selectedPlaylist.id !== -1">
-            {{playlistTracks.length}} songs
-          </ng-container>
+          {{ selectedPlaylist.id === -1
+              ? (likedTracks.length + ' songs')
+              : (playlistTracks.length + ' songs') }}
         </p>
       </div>
     </div>
 
-    <!-- Play Button -->
     <div class="playlist-actions">
-      <ion-button expand="block"
-                  color="primary"
-                  class="play-button"
-                  (click)="playPlaylist(selectedPlaylist.id === -1 ? likedTracks : playlistTracks)">
-        <fa-icon [icon]="['fas', 'play']" class="play-icon"></fa-icon>
+      <ion-button expand="block" color="primary"
+                  (click)="playPlaylist()">
+        <fa-icon [icon]="['fas','play']" class="play-icon"></fa-icon>
         Play All
       </ion-button>
     </div>
 
-    <!-- Track List -->
     <div class="track-list">
-      <div *ngFor="let track of (selectedPlaylist.id === -1 ? likedTracks : playlistTracks); let i = index"
+      <div *ngFor="
+              let track of (selectedPlaylist.id === -1
+                ? likedTracks
+                : playlistTracks);
+              let i = index"
            class="track-item"
            (click)="playTrack(track)">
         <div class="track-item-left">
-          <div class="track-number">{{i + 1}}</div>
-          <div class="track-thumbnail" [style.background-image]="'url(' + (track.imageUrl || 'assets/placeholder.png') + ')'"></div>
+          <div class="track-number">{{ i + 1 }}</div>
+          <div class="track-thumbnail"
+               [style.background-image]="'url(' +
+                 (track.imageUrl || 'assets/placeholder.png') +
+               ')'">
+          </div>
           <div class="track-details">
-            <h3 class="track-title">{{track.title}}</h3>
-            <p class="track-artist">{{track.artist}}</p>
+            <h3 class="track-title">{{ track.title }}</h3>
+            <p class="track-artist">{{ track.artist }}</p>
           </div>
         </div>
-
         <div class="track-item-right">
-          <button class="like-button" (click)="toggleLike(track); $event.stopPropagation()">
-            <fa-icon [icon]="['fas', 'heart']" [ngClass]="{'liked': track.liked}"></fa-icon>
+          <button class="like-button"
+                  (click)="toggleLike(track); $event.stopPropagation()">
+            <fa-icon [icon]="['fas','heart']"
+                     [ngClass]="{'liked': track.liked}">
+            </fa-icon>
           </button>
-          <button class="more-button">
-            <fa-icon [icon]="['fas', 'ellipsis-v']"></fa-icon>
+          <button class="more-button" (click)="$event.stopPropagation()">
+            <fa-icon [icon]="['fas','ellipsis-v']"></fa-icon>
           </button>
         </div>
       </div>
     </div>
-  </div>
+  </ng-container>
 </ion-content>
