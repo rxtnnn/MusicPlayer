@@ -120,6 +120,32 @@
         </div>
       </div>
     </div>
+    <!-- Local Music -->
+    <div class="section-header">
+      <h2>Local Music</h2>
+    </div>
+    <div class="horizontal-scroll-container" *ngIf="hasLocalMusic">
+      <div
+        *ngFor="let track of localMusic"
+        class="music-card"
+        (click)="playTrack(track)"
+      >
+        <div class="album-art-container">
+          <img
+            [src]="track.imageUrl || 'assets/default-album-art.png'"
+            [alt]="track.title"
+            class="album-art"
+          />
+          <div class="play-overlay">
+            <fa-icon [icon]="['fas', 'play']" size="lg"></fa-icon>
+          </div>
+        </div>
+        <div class="track-info">
+          <h3 class="track-title">{{ track.title }}</h3>
+          <p class="track-artist">{{ track.artist }}</p>
+        </div>
+      </div>
+    </div>
 
     <!-- New Releases -->
     <div class="section-header">

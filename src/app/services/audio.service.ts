@@ -218,6 +218,7 @@ export class AudioService {
  async togglePlay(): Promise<void> {
     if (this.isPlaying$.getValue()) {
       await this.pause();
+      alert('Toggle Play working')
     } else {
       const track = this.currentTrack$.getValue();
       if (track) {
