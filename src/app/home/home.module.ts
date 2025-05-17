@@ -23,7 +23,6 @@ import { fab } from '@fortawesome/free-brands-svg-icons';
 })
 export class HomePageModule {
   constructor(library: FaIconLibrary) {
-    // Add the icon packs to the library
     library.addIconPacks(fas, far, fab);
   }
 }

@@ -21,7 +21,7 @@ import { fab } from '@fortawesome/free-brands-svg-icons';
     BrowserModule,
     IonicModule.forRoot(),
     AppRoutingModule,
-    HttpClientModule, // Import HttpClientModule for HTTP requests
+    HttpClientModule,
     FontAwesomeModule,
     IonicStorageModule.forRoot({
       name: '__harmony_db',

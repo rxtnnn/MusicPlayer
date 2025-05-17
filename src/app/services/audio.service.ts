@@ -1,9 +1,11 @@
 // src/app/services/audio.service.ts
+
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { StorageService } from './storage.service';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Platform } from '@ionic/angular';
+import { NativeAudio } from '@capacitor-community/native-audio';
 export interface Track {
   id: string;
   title: string;
@@ -14,132 +16,218 @@ export interface Track {
   previewUrl: string;
   spotifyId: string;
   liked: boolean;
+  isLocal?: boolean;
+  localPath?: string;
 }
 
 @Injectable({ providedIn: 'root' })
 export class AudioService {
-  private audio: HTMLAudioElement;
+  public audio: HTMLAudioElement;
   private currentTrack$ = new BehaviorSubject<Track | null>(null);
-  private isPlaying$  = new BehaviorSubject<boolean>(false);
+  private isPlaying$ = new BehaviorSubject<boolean>(false);
   private currentTime$ = new BehaviorSubject<number>(0);
-  private duration$    = new BehaviorSubject<number>(0);
+  private duration$ = new BehaviorSubject<number>(0);
   private queue: Track[] = [];
   private queueIndex = 0;
   private timerId: any;
   private _currentBlobUrl: string | null = null;
 
-  constructor(private storage: StorageService, private platform: Platform ) {
-    this.audio = new Audio();
+  constructor(
+    private storage: StorageService,
+    private platform: Platform
+  ) {
+    this.audio = document.createElement('audio');
+    this.audio.crossOrigin = 'anonymous';
     this.setupAudioEvents();
     this.restoreLastTrack();
   }
 
-  private setupAudioEvents(): void {
-    this.audio.addEventListener('loadedmetadata', () => this.duration$.next(this.audio.duration));
-    this.audio.addEventListener('timeupdate', () => this.currentTime$.next(this.audio.currentTime));
-    this.audio.addEventListener('play', () => { this.isPlaying$.next(true); this.startUpdates(); });
-    this.audio.addEventListener('pause', () => { this.isPlaying$.next(false); this.stopUpdates(); });
-    this.audio.addEventListener('ended', () => this.next());
+  private setupAudioEvents() {
+    this.audio.addEventListener('loadedmetadata', () => {
+      console.log('Audio loadedmetadata event, duration:', this.audio.duration);
+      this.duration$.next(this.audio.duration);
+    });
+
+    this.audio.addEventListener('timeupdate', () => {
+      this.currentTime$.next(this.audio.currentTime);
+    });
+
+    this.audio.addEventListener('play', () => {
+      console.log('Audio play event fired');
+      this.isPlaying$.next(true);
+      this.startUpdates();
+    });
+
+    this.audio.addEventListener('pause', () => {
+      console.log('Audio pause event fired');
+      this.isPlaying$.next(false);
+      this.stopUpdates();
+    });
+
+    this.audio.addEventListener('ended', () => {
+      console.log('Audio ended event fired');
+      this.next();
+    });
+
+    this.audio.addEventListener('error', (e: any) => {
+      const error = this.audio.error;
+      console.error('Audio playback error:', e);
+      console.error('Error code:', error ? error.code : 'unknown');
+      console.error('Error message:', error ? error.message : 'unknown');
+      this.isPlaying$.next(false);
+    });
   }
 
-  private startUpdates(): void {
+  private startUpdates() {
+    this.stopUpdates(); // Clear any existing timer
     this.timerId = setInterval(() => this.currentTime$.next(this.audio.currentTime), 500);
   }
 
-  private stopUpdates(): void {
+  private stopUpdates() {
     if (this.timerId) {
       clearInterval(this.timerId);
+      this.timerId = null;
     }
   }
 
-  private async restoreLastTrack(): Promise<void> {
+  private async restoreLastTrack() {
     try {
       const saved = await this.storage.get('last_played_track') as Track | null;
       if (saved) {
+        console.log('Restoring last played track:', saved.title);
         this.currentTrack$.next(saved);
-        this.audio.src = saved.previewUrl;
-        this.audio.load();
+        // Don't set audio.src here, just prepare the track info
       }
     } catch (err) {
       console.error('[AudioService] restoreLastTrack error:', err);
     }
   }
 
-  private saveLastTrack(track: Track): void {
+  private saveLastTrack(track: Track) {
     this.storage.set('last_played_track', track);
   }
 
-  async play(track?: Track): Promise<void> {
-    if (track) {
-      if (!track.previewUrl) {
-        alert(`No preview available for "${track.title}"`);
+   async play(track: Track): Promise<void> {
+    // Cleanup previous playback
+    this.cleanup();
+    // Update current track
+    this.currentTrack$.next(track);
+
+    if (track.isLocal && this.platform.is('hybrid')) {
+      // Native playback via NativeAudio
+      try {
+        await NativeAudio.preload({ assetId: track.id, assetPath: track.previewUrl });
+      } catch {
+        // Already loaded
+      }
+      await NativeAudio.play({ assetId: track.id });
+      this.isPlaying$.next(true);
+    } else {
+      // Web or streaming playback
+      this.audio.src = track.previewUrl;
+      this.audio.load();
+      try {
+        await this.audio.play();
+      } catch (e) {
+        console.error('Playback failed:', e);
+      }
+    }
+  }
+
+  /** Playback a local file path/URI */
+  private async playLocalFile(track: Track, filePath: string): Promise<void> {
+    try {
+      console.log('Playing local file from path:', filePath);
+
+      // For Web platform, try using the URL directly (for blob URLs)
+      if (!this.platform.is('hybrid') && filePath.startsWith('blob:')) {
+        console.log('Using blob URL directly for web platform');
+        this.audio.src = filePath;
+        this.audio.load();
         return;
       }
 
+      // Clean filepath - remove file:// prefix if present
+      let path = filePath;
+      if (path.startsWith('file://')) {
+        path = path.replace(/^file:\/\//, '');
+      }
+
+      // Try to read the file from the filesystem
       try {
-        this.currentTrack$.next(track);
+        console.log('Reading file from filesystem:', path);
+        const fileData = await Filesystem.readFile({
+          path: path,
+          directory: Directory.Data
+        });
 
-        // Handle filesystem URLs for local files
-        if (track.previewUrl.startsWith('file://') || track.previewUrl.includes('/_capacitor_file_')) {
-          try {
-            // Read the file from filesystem
-            const fileData = await Filesystem.readFile({
-              path: track.previewUrl.replace(/^file:\/\//, ''),
-              directory: Directory.Data
-            });
-
-            // Check if data is a string (base64)
-            if (typeof fileData.data === 'string') {
-              // Create a blob URL from the base64 data
-              const blob = this.base64ToBlob(fileData.data, 'audio/mpeg');
-              const blobUrl = URL.createObjectURL(blob);
-
-              // Set the audio source to the blob URL
-              this.audio.src = blobUrl;
-
-              // Store the blob URL to revoke it later
-              this._currentBlobUrl = blobUrl;
-            } else {
-              // Handle the case where it's already a Blob
-              const blobUrl = URL.createObjectURL(fileData.data);
-              this.audio.src = blobUrl;
-              this._currentBlobUrl = blobUrl;
-            }
-          } catch (e) {
-            console.error('Error loading local file:', e);
-            alert(`Unable to play track: File could not be loaded`);
-            return;
-          }
+        // Create a blob URL from the file data
+        if (typeof fileData.data === 'string') {
+          // Handle base64 data
+          const blob = this.base64ToBlob(fileData.data, this.getAudioMimeType(path));
+          const blobUrl = URL.createObjectURL(blob);
+          console.log('Created blob URL for base64 data:', blobUrl);
+          this.audio.src = blobUrl;
+          this._currentBlobUrl = blobUrl;
         } else {
-          // Regular URL (streaming)
-          this.audio.src = track.previewUrl;
+          // Handle binary data
+          const blobUrl = URL.createObjectURL(new Blob([fileData.data]));
+          console.log('Created blob URL for binary data:', blobUrl);
+          this.audio.src = blobUrl;
+          this._currentBlobUrl = blobUrl;
         }
 
         this.audio.load();
-        this.saveLastTrack(track);
-      } catch (e) {
-        console.error('Error setting up track:', e);
-        alert(`Unable to play track: File could not be loaded`);
-        return;
+      } catch (error) {
+        console.error('Error reading file, trying direct path:', error);
+
+        // As a fallback, try using the file path directly
+        this.audio.src = filePath;
+        this.audio.load();
+      }
+    } catch (e) {
+      console.error('Error loading local file:', e);
+      throw e;
+    }
+  }
+
+  // Helper to determine MIME type from file extension
+  private getAudioMimeType(filePath: string): string {
+    const extension = filePath.split('.').pop()?.toLowerCase() || '';
+    switch (extension) {
+      case 'mp3': return 'audio/mpeg';
+      case 'wav': return 'audio/wav';
+      case 'm4a': return 'audio/mp4';
+      case 'aac': return 'audio/aac';
+      case 'ogg': return 'audio/ogg';
+      case 'flac': return 'audio/flac';
+      default: return 'audio/mpeg'; // Default to MP3
+    }
+  }
+
+  async pause(): Promise<void> {
+    const track = this.currentTrack$.getValue();
+    if (track?.isLocal && this.platform.is('hybrid')) {
+      await NativeAudio.stop({ assetId: track.id });
+    } else {
+      this.audio.pause();
+    }
+    this.isPlaying$.next(false);
+  }
+
+ async togglePlay(): Promise<void> {
+    if (this.isPlaying$.getValue()) {
+      await this.pause();
+    } else {
+      const track = this.currentTrack$.getValue();
+      if (track) {
+        await this.play(track);
       }
     }
-
-    this.audio.play().catch(e => {
-      console.error('Playback error:', e);
-      alert(`Unable to play track: Playback failed`);
-    });
-  }
-
-
-  pause(): void {
-    this.audio.pause();
-  }
-
-  togglePlay(): void {
-    this.audio.paused ? this.play() : this.pause();
   }
 
   setQueue(tracks: Track[], startIndex = 0): void {
+    console.log(`Setting queue with ${tracks.length} tracks, starting at index ${startIndex}`);
     this.queue = tracks;
     this.queueIndex = startIndex;
     if (tracks.length) {
@@ -149,23 +237,33 @@ export class AudioService {
 
   next(): void {
     this.cleanup();
-    if (!this.queue.length) return;
+    if (!this.queue.length) {
+      alert('Cannot go to next track: queue is empty');
+      return;
+    }
     this.queueIndex = (this.queueIndex + 1) % this.queue.length;
+    console.log(`Moving to next track, new index: ${this.queueIndex}`);
     this.play(this.queue[this.queueIndex]);
   }
 
   previous(): void {
     this.cleanup();
-    if (!this.queue.length) return;
+    if (!this.queue.length) {
+      console.log('Cannot go to previous track: queue is empty');
+      return;
+    }
     if (this.audio.currentTime > 3) {
+      console.log('Current time > 3 seconds, restarting current track');
       this.audio.currentTime = 0;
     } else {
       this.queueIndex = (this.queueIndex - 1 + this.queue.length) % this.queue.length;
+      console.log(`Moving to previous track, new index: ${this.queueIndex}`);
       this.play(this.queue[this.queueIndex]);
     }
   }
 
   seek(time: number): void {
+    console.log(`Seeking to time: ${time}`);
     this.audio.currentTime = time;
   }
 
@@ -176,201 +274,138 @@ export class AudioService {
       await this.storage.addLiked(track.id);
     }
     track.liked = !track.liked;
+    console.log(`Toggled like status for ${track.title}: ${track.liked}`);
   }
 
-  /**
-   * Download a track locally and return its URI. Stub implementation.
-   */
-  async downloadTrack(track: Track): Promise<string> {
-    // TODO: Replace stub with actual download logic
-    const uri = track.previewUrl;
-    return uri;
-  }
-
-  // Observables for UI binding
+  // Observable getters
   getCurrentTrack(): Observable<Track|null> { return this.currentTrack$.asObservable(); }
-  getIsPlaying():   Observable<boolean>   { return this.isPlaying$.asObservable(); }
-  getCurrentTime(): Observable<number>    { return this.currentTime$.asObservable(); }
-  getDuration():    Observable<number>    { return this.duration$.asObservable(); }
-  getQueue():       Track[]               { return this.queue; }
-  getQueueIndex():  number                { return this.queueIndex; }
+  getIsPlaying(): Observable<boolean> { return this.isPlaying$.asObservable(); }
+  getCurrentTime(): Observable<number> { return this.currentTime$.asObservable(); }
+  getDuration(): Observable<number> { return this.duration$.asObservable(); }
+  getQueue(): Track[] { return this.queue; }
+  getQueueIndex(): number { return this.queueIndex; }
 
-  // src/app/services/audio.service.ts
+   async addLocalTrack(file: File): Promise<Track> {
+    const id  = `local-${Date.now()}`;
+    const ext = (file.name.split('.').pop() || 'mp3').toLowerCase();
+    let previewUrl: string;
 
-// Add these methods to your AudioService class
-
-/**
- * Add a local track to the library and play it
- */
-  async addLocalTrack(file: File): Promise<Track> {
-    try {
-      // Generate a unique ID for the local track
-      const trackId = `local-${Date.now()}`;
-
-      // Create a reader to read the file
-      const reader = new FileReader();
-
-      // Read the file as array buffer
-      const arrayBuffer = await this.readFileAsArrayBuffer(file);
-
-      // Convert to base64 for saving
-      const base64Data = await this.convertArrayBufferToBase64(arrayBuffer);
-
-      // Determine file extension
-      const fileExt = file.name.split('.').pop() || 'mp3';
-
-      // Save file to filesystem
-      const savedFile = await Filesystem.writeFile({
-        path: `music/${trackId}.${fileExt}`,
-        data: base64Data,
+    if (this.platform.is('hybrid')) {
+      const base64 = await this.fileToBase64(file);
+      const saved = await Filesystem.writeFile({
+        path: `music/${id}.${ext}`,
+        data: base64,
         directory: Directory.Data,
         recursive: true
       });
-
-      // Create track object with filesystem URL
-      const track: Track = {
-        id: trackId,
-        title: this.formatLocalFileName(file.name),
-        artist: 'Local File',
-        album: 'My Music',
-        duration: 0, // Will be updated when audio loads
-        imageUrl: 'assets/default-album-art.png',
-        previewUrl: savedFile.uri, // Use the filesystem URI
-        spotifyId: '',
-        liked: false
-      };
-
-      // Try to get the duration
-      try {
-        // Create a temporary object URL to get duration
-        const tempUrl = URL.createObjectURL(file);
-        const duration = await this.getAudioDuration(tempUrl);
-        track.duration = duration;
-        // Revoke the temporary URL
-        URL.revokeObjectURL(tempUrl);
-      } catch (e) {
-        console.error('Failed to get audio duration', e);
-      }
-
-      // Save the track to storage
-      await this.storage.saveTrack(track);
-
-      // Add to downloaded music
-      await this.storage.addDownloaded(track.id, savedFile.uri);
-
-      return track;
-    } catch (err) {
-      console.error('Error adding local track:', err);
-      throw err;
+      previewUrl = saved.uri;
+    } else {
+      previewUrl = URL.createObjectURL(file);
     }
+
+    const track: Track = {
+      id,
+      title:     file.name.replace(/\.[^/.]+$/, ''),
+      artist:    'Local File',
+      album:     'My Music',
+      duration:  0,
+      imageUrl:  'assets/default-album-art.png',
+      previewUrl,
+      spotifyId: '',
+      liked:     false,
+      isLocal:   true
+    };
+
+    await this.storage.saveTrack(track);
+    return track;
   }
 
-  private readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        resolve(reader.result as ArrayBuffer);
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  }
 
-  private convertArrayBufferToBase64(buffer: ArrayBuffer): string {
-    let binary = '';
-    const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
-    }
-    return window.btoa(binary);
-  }
-
-  private formatLocalFileName(fileName: string): string {
-  // Remove the file extension
-    const nameParts = fileName.split('.');
-    if (nameParts.length > 1) {
-      nameParts.pop();
-    }
-    const nameWithoutExt = nameParts.join('.');
-
-    // Replace underscores and hyphens with spaces
-    return nameWithoutExt.replace(/[_-]/g, ' ');
-  }
-
-  /**
-   * Get audio duration by loading it in a temporary audio element
-   */
-  private getAudioDuration(url: string): Promise<number> {
+  /** Get audio duration using a temporary audio element */
+  private async getAudioDuration(file: File): Promise<number> {
     return new Promise((resolve) => {
-      const tempAudio = new Audio();
-      tempAudio.src = url;
+      // Create a temporary URL for the file
+      const url = URL.createObjectURL(file);
 
-      // Once metadata is loaded, we'll know the duration
+      // Create a temporary audio element
+      const tempAudio = new Audio();
+
+      // Set a timeout to avoid hanging
+      const timeout = setTimeout(() => {
+        console.warn('Audio duration detection timeout, defaulting to 0');
+        URL.revokeObjectURL(url);
+        resolve(0);
+      }, 3000);
+
+      // When metadata is loaded, get the duration
       tempAudio.addEventListener('loadedmetadata', () => {
-        resolve(tempAudio.duration);
-        tempAudio.pause();
-        tempAudio.src = '';
+        clearTimeout(timeout);
+        const duration = isNaN(tempAudio.duration) ? 0 : tempAudio.duration;
+        URL.revokeObjectURL(url);
+        resolve(duration);
       });
 
-      // If there's an error (or no metadata), just return 0
+      // Handle errors
       tempAudio.addEventListener('error', () => {
-        console.error('Error getting audio duration');
+        clearTimeout(timeout);
+        console.warn('Error getting audio duration, using default 0');
+        URL.revokeObjectURL(url);
         resolve(0);
       });
 
-      tempAudio.load();
+      // Set the source and load the audio
+      tempAudio.preload = 'metadata';
+      tempAudio.src = url;
     });
   }
 
-  /**
-   * Handle playback of downloaded tracks
-   */
-  playDownloadedTrack(track: Track): void {
-    if (!track.previewUrl) {
-      console.error('No preview URL for track:', track);
-      return;
+  /** Helper function to convert base64 to Blob */
+  private base64ToBlob(base64: string, type: string): Blob {
+    const byteCharacters = atob(base64);
+    const byteArrays = [];
+
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
     }
 
-    // Play the track
-    this.play(track);
+    return new Blob(byteArrays, { type });
   }
 
+  private async fileToBase64(file: File): Promise<string> {
+    const buffer = await file.arrayBuffer();
+    const bytes  = new Uint8Array(buffer);
+    const CHUNK  = 0x8000;   // 8 KB
+    let   binary = '';
 
-/**
- * Convert base64 to Blob
- */
-private base64ToBlob(base64: string, type: string): Blob {
-  const byteCharacters = atob(base64);
-  const byteArrays = [];
-
-  for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-    const slice = byteCharacters.slice(offset, offset + 512);
-
-    const byteNumbers = new Array(slice.length);
-    for (let i = 0; i < slice.length; i++) {
-      byteNumbers[i] = slice.charCodeAt(i);
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      const slice = bytes.subarray(i, i + CHUNK);
+      binary += String.fromCharCode(...slice);
     }
 
-    const byteArray = new Uint8Array(byteNumbers);
-    byteArrays.push(byteArray);
+    return window.btoa(binary);
   }
 
-  return new Blob(byteArrays, {type});
-}
+  /** Clean up resources when audio changes or component is destroyed */
+  cleanup(): void {
+    // Revoke any existing blob URLs
+    if (this._currentBlobUrl) {
+      console.log('Cleaning up blob URL');
+      URL.revokeObjectURL(this._currentBlobUrl);
+      this._currentBlobUrl = null;
+    }
 
-/**
- * Clean up resources when audio changes or component is destroyed
- */
-cleanup(): void {
-  if (this._currentBlobUrl) {
-    URL.revokeObjectURL(this._currentBlobUrl);
-    this._currentBlobUrl = null;
+    // Stop time updates
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
   }
-
-  if (this.timerId) {
-    clearInterval(this.timerId);
-    this.timerId = null;
-  }
-}
-
 }

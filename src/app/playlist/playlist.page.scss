@@ -12,7 +12,6 @@ ion-toolbar{
 }
 .play-container {
   background-color: var(--ion-color-dark);
-  color: var(--ion-color-light);
 }
 
 // Liked Songs Card
@@ -23,7 +22,6 @@ ion-toolbar{
   border-radius: 16px;
   padding: 20px;
   margin: 16px;
-  color: white;
   box-shadow: 0 8px 20px rgba(106, 90, 205, 0.3);
   transition: transform 0.3s ease;
 
@@ -57,7 +55,7 @@ ion-toolbar{
   }
 }
 
-// Add this to your playlist.page.scss
+// Downloaded Songs card
 .downloaded-songs-card {
   display: flex;
   align-items: center;
@@ -97,65 +95,52 @@ ion-toolbar{
     }
   }
 }
+
 // Playlists Grid
 .playlists-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(1, 1fr);
   gap: 16px;
   padding: 0 16px;
+  margin-bottom: 80px; // Add space for FAB button
 }
 
-.playlist-card, .create-playlist-card {
-  background-color: var(--ion-color-dark-tint);
-  border-radius: 16px;
-  padding: 16px;
-  text-align: center;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-
-  &:hover {
-    transform: scale(1.05);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-  }
+// Updated Playlist Card
+.playlist-card {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 10px 0;
 
   .playlist-card-art {
-    width: 80px;
-    height: 80px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    margin: 0 auto 12px;
-    color: white;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
+    margin-right: 20px;
   }
 
-  h3 {
-    font-size: 16px;
-    font-weight: 600;
-    margin: 0 0 8px;
-    color: var(--ion-color-light);
-  }
+  .playlist-info {
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
 
-  p {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.6);
-    margin: 0;
+    p {
+      font-size: 14px;
+      margin: 0;
+    }
   }
 }
 
-.create-playlist-card {
-  .create-playlist-button {
-    width: 80px;
-    height: 80px;
-    border-radius: 16px;
-    background-color: var(--ion-color-dark-shade);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 12px;
-    color: var(--ion-color-secondary);
-    border: 2px dashed var(--ion-color-secondary);
-  }
+// FAB Button
+ion-fab {
+  margin-bottom: 16px;
+  margin-right: 16px;
 }
 
 // Playlist Detail
@@ -178,7 +163,6 @@ ion-toolbar{
     justify-content: center;
     margin-bottom: 20px;
     background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
-    color: white;
     box-shadow: 0 10px 30px rgba(106, 90, 205, 0.3);
   }
 
@@ -189,12 +173,10 @@ ion-toolbar{
       font-size: 24px;
       font-weight: 700;
       margin: 0 0 10px;
-      color: var(--ion-color-light);
     }
 
     p {
       font-size: 16px;
-      color: rgba(255, 255, 255, 0.7);
       margin: 0;
     }
   }
@@ -238,7 +220,6 @@ ion-toolbar{
 
       .track-number {
         font-size: 16px;
-        color: rgba(255, 255, 255, 0.6);
         margin-right: 16px;
         width: 24px;
         text-align: center;
@@ -257,13 +238,11 @@ ion-toolbar{
         .track-title {
           font-size: 16px;
           font-weight: 600;
-          color: var(--ion-color-light);
           margin: 0 0 4px;
         }
 
         .track-artist {
           font-size: 14px;
-          color: rgba(255, 255, 255, 0.6);
           margin: 0;
         }
       }
@@ -277,17 +256,27 @@ ion-toolbar{
       .like-button, .more-button {
         background: transparent;
         border: none;
-        color: rgba(255, 255, 255, 0.6);
         transition: color 0.3s ease;
-
-        &:hover {
-          color: var(--ion-color-light);
-        }
-
-        .liked {
-          color: var(--ion-color-secondary);
-        }
       }
     }
+  }
+}
+
+// Make sure ion-item is transparent
+ion-item {
+  --background: transparent;
+  --inner-padding-end: 0;
+  --padding-start: 0;
+  --border-color: rgba(255, 255, 255, 0.1);
+}
+
+// Fix for sliding items
+ion-item-sliding {
+  background-color: transparent;
+  border-radius: 16px;
+  margin-bottom: 10px;
+
+  ion-item-options {
+    border-radius: 0 16px 16px 0;
   }
 }

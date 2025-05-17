@@ -1,31 +1,41 @@
 import { Component, OnInit } from '@angular/core';
 import { App } from '@capacitor/app';
 import { Platform } from '@ionic/angular';
+import { Location } from '@angular/common';
 import { SettingsService } from './services/settings.service';
+
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html',
   styleUrls: ['app.component.scss'],
-  standalone: false
+  standalone: false,
 })
-export class AppComponent {
-  constructor(private platform: Platform, private settingsService: SettingsService) {
+export class AppComponent implements OnInit {
+  constructor(
+    private platform: Platform,
+    private location: Location,
+    private settingsService: SettingsService
+  ) {
     this.platform.ready().then(() => {
+      // OAuth callback listener (e.g. Spotify)
       App.addListener('appUrlOpen', (data: { url: string }) => {
-        // e.g. data.url === 'capacitor://localhost/callback?code=…'
         if (data.url.startsWith('capacitor://localhost/callback')) {
-          // parse out the code
-          const [, queryString] = data.url.split('?');
-          const params = new URLSearchParams(queryString);
+          const [, query] = data.url.split('?');
+          const params = new URLSearchParams(query);
           const code = params.get('code');
-          // now exchange code for a token…
           console.log('OAuth code:', code);
         }
       });
+
+      // Android hardware back-button handler
+      App.addListener('backButton', () => {
+        // go back in the browser/app history
+        this.location.back();
+      });
     });
   }
+
   ngOnInit() {
-    // Initialize theme based on saved settings
     this.settingsService.initializeTheme();
   }
 }

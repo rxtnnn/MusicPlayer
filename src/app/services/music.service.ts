@@ -4,6 +4,7 @@ import { Observable, of, from } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { StorageService } from './storage.service';
+import { Track } from './audio.service';
 
 @Injectable({
   providedIn: 'root'
@@ -144,14 +145,9 @@ export class MusicService {
     );
   }
 
-  getPlaylistsByGenre(
-    categoryId: string,
-    country: string = 'PH',    // ← default to PH
-    limit: number = 20
-  ): Observable<any[]> {
+  getPlaylistsByGenre(categoryId: string,country: string = 'PH',limit: number = 20): Observable<any[]> {
     const endpoint = environment.spotify.apiEndpoint;
 
-    // featured playlists still scoped to a country
     if (categoryId === 'all') {
       const params = new HttpParams()
         .set('country', country)
@@ -175,7 +171,6 @@ export class MusicService {
       switchMap(() =>
         this.http.get<any>(url, { headers: this.getHeaders() })
       ),
-      // Spotify may return { playlists: { items: […] } } OR { items: […] }
       map(resp => {
         if (resp.playlists?.items)       return resp.playlists.items;
         else if (Array.isArray(resp.items)) return resp.items;
@@ -183,9 +178,7 @@ export class MusicService {
       }),
       catchError(() => of([]))
     );
-    }
-
-
+  }
 
   /**
    * Get tracks from a specific playlist
@@ -201,14 +194,56 @@ export class MusicService {
       ),
       tap(data => console.log('Playlist tracks received:', data)),
       map((response: any) => {
-        // Filter tracks without a preview URL
-        const filteredTracks = response.items.filter((item: any) =>
-          item.track && item.track.preview_url);
-        console.log(`Filtered ${response.items.length} to ${filteredTracks.length} tracks with preview URLs`);
-        return filteredTracks;
+        // Don't filter out tracks without preview URLs here
+        return response.items;
       }),
       catchError((error) => {
         console.error('Error fetching playlist tracks:', error);
+        return of([]);
+      })
+    );
+  }
+
+  /**
+   * Get tracks by genre - NEW METHOD
+   */
+  getTracksByGenre(genreId: string, limit: number = 50): Observable<Track[]> {
+    console.log(`Fetching tracks for genre: ${genreId}`);
+
+    // First get playlists for the genre
+    return this.getPlaylistsByGenre(genreId).pipe(
+      switchMap(playlists => {
+        if (playlists.length === 0) {
+          return of([]);
+        }
+
+        // Select a few playlists to get tracks from
+        const selectedPlaylists = playlists.slice(0, 3);
+
+        // Create an array of observables, each getting tracks from a playlist
+        const playlistObservables = selectedPlaylists.map(playlist =>
+          this.getPlaylistTracks(playlist.id)
+        );
+
+        // Combine all playlist tracks into one array
+        return from(Promise.all(playlistObservables.map(obs =>
+          obs.toPromise()
+        ))).pipe(
+          map(playlistTracksArrays => {
+            // Flatten the array of arrays
+            const allTracks = playlistTracksArrays
+              .reduce((acc, current) => acc.concat(current), []);
+
+            // Map Spotify tracks to our Track model
+            return allTracks
+              .filter((item: { track: { preview_url: any; }; }) => item.track && item.track.preview_url) // Only tracks with preview URLs
+              .map((item: { track: any; }) => this.mapSpotifyTrackToModel(item.track))
+              .slice(0, limit); // Limit the number of tracks
+          })
+        );
+      }),
+      catchError(error => {
+        console.error('Error fetching tracks by genre:', error);
         return of([]);
       })
     );
@@ -240,9 +275,6 @@ export class MusicService {
     );
   }
 
-  /**
-   * Get track details by track ID
-   */
   getTrackById(trackId: string): Observable<any> {
     console.log(`Fetching track by ID: ${trackId}`);
 
@@ -258,5 +290,28 @@ export class MusicService {
         return of(null);
       })
     );
+  }
+
+  /**
+   * Map a Spotify track to our Track model
+   */
+  mapSpotifyTrackToModel(item: any): Track {
+    return {
+      id: item.id || `track-${Date.now()}`,
+      title: item.name,
+      artist: Array.isArray(item.artists)
+        ? item.artists.map((a: any) => a.name).join(', ')
+        : 'Unknown Artist',
+      album: item.album?.name || 'Unknown Album',
+      duration: (item.duration_ms ?? item.duration) / 1000,
+      imageUrl:
+        item.images?.[0]?.url ||
+        item.album?.images?.[0]?.url ||
+        'assets/default-album-art.png',
+      previewUrl: item.preview_url || '',
+      spotifyId: item.id || '',
+      liked: false,
+      isLocal: false
+    };
   }
 }

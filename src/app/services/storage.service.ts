@@ -1,13 +1,13 @@
-// src/app/services/storage.service.ts
-
+// Enhanced StorageService
 import { Injectable } from '@angular/core';
-import { Platform }   from '@ionic/angular';
+import { Platform } from '@ionic/angular';
 import {
   CapacitorSQLite,
   SQLiteConnection,
   SQLiteDBConnection
 } from '@capacitor-community/sqlite';
-import { Track }      from './audio.service';
+import { Track } from './audio.service';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 @Injectable({ providedIn: 'root' })
 export class StorageService {
@@ -19,25 +19,17 @@ export class StorageService {
     this.sqlite = new SQLiteConnection(CapacitorSQLite);
   }
 
-  async ensureInit(): Promise<void> {
+    async ensureInit(): Promise<void> {
     if (this._initPromise) return this._initPromise;
-
     this._initPromise = (async () => {
       await this.platform.ready();
       if (!this.platform.is('hybrid')) {
-        // Web fallback storage
         await this.sqlite.initWebStore();
       }
-      // clean up any leftover connections
       await this.sqlite.checkConnectionsConsistency();
-
-      // (re)create connection
-      this.db = await this.sqlite.createConnection(
-        'harmony.db', false, 'no-encryption', 1, false
-      );
+      this.db = await this.sqlite.createConnection('harmony.db', false, 'no-encryption', 1, false);
       await this.db.open();
 
-      // create all tables in one transaction
       const sql = `
         CREATE TABLE IF NOT EXISTS playlists (
           id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,16 +57,12 @@ export class StorageService {
           image_url    TEXT,
           preview_url  TEXT,
           spotify_id   TEXT,
-          liked        INTEGER DEFAULT 0
+          liked        INTEGER DEFAULT 0,
+          is_local     INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS liked_music (
           track_id     TEXT PRIMARY KEY,
           liked_at     TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        CREATE TABLE IF NOT EXISTS downloaded_music (
-          track_id     TEXT PRIMARY KEY,
-          file_uri     TEXT,
-          downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
@@ -83,7 +71,6 @@ export class StorageService {
       `;
       await this.db.execute(sql);
     })();
-
     return this._initPromise;
   }
 
@@ -139,10 +126,10 @@ export class StorageService {
     await this.ensureInit();
     const res = await this.db.query(`
       SELECT t.id, t.title, t.artist, t.album,
-             t.duration, t.image_url  AS imageUrl,
-             t.preview_url              AS previewUrl,
-             t.spotify_id               AS spotifyId,
-             t.liked
+             t.duration, t.image_url AS imageUrl,
+             t.preview_url AS previewUrl,
+             t.spotify_id AS spotifyId,
+             t.liked, t.is_local AS isLocal
         FROM tracks t
         JOIN playlist_tracks pt
           ON pt.track_id = t.id
@@ -151,18 +138,51 @@ export class StorageService {
     `, [playlistId]);
 
     return (res.values || []).map((r: any) => ({
-      id:         r.id,
-      title:      r.title,
-      artist:     r.artist,
-      album:      r.album,
-      duration:   r.duration,
-      imageUrl:   r.imageUrl,
+      id: r.id,
+      title: r.title,
+      artist: r.artist,
+      album: r.album,
+      duration: r.duration,
+      imageUrl: r.imageUrl,
       previewUrl: r.previewUrl,
-      spotifyId:  r.spotifyId,
-      liked:      !!r.liked
+      spotifyId: r.spotifyId,
+      liked: !!r.liked,
+      isLocal: !!r.isLocal
     }));
   }
 
+  async getLocalTracks(): Promise<Track[]> {
+    await this.ensureInit();
+    const res = await this.db.query(`
+      SELECT
+        id,
+        title,
+        artist,
+        album,
+        duration,
+        image_url    AS imageUrl,
+        preview_url  AS previewUrl,
+        spotify_id   AS spotifyId,
+        liked,
+        is_local     AS isLocal
+      FROM tracks
+      WHERE is_local = 1
+      ORDER BY ROWID DESC;
+    `);
+
+    return (res.values || []).map((r: any) => ({
+      id:        r.id,
+      title:     r.title,
+      artist:    r.artist,
+      album:     r.album,
+      duration:  r.duration,
+      imageUrl:  r.imageUrl,
+      previewUrl:r.previewUrl,
+      spotifyId: r.spotifyId,
+      liked:     !!r.liked,
+      isLocal:   !!r.isLocal
+    }));
+  }
   // ---------- Liked Music ----------
 
   async addLiked(trackId: string): Promise<boolean> {
@@ -196,24 +216,25 @@ export class StorageService {
     await this.ensureInit();
     const res = await this.db.query(`
       SELECT t.id, t.title, t.artist, t.album,
-             t.duration, t.image_url  AS imageUrl,
-             t.preview_url              AS previewUrl,
-             t.spotify_id               AS spotifyId,
-             1                          AS liked
+             t.duration, t.image_url AS imageUrl,
+             t.preview_url AS previewUrl,
+             t.spotify_id AS spotifyId,
+             1 AS liked, t.is_local AS isLocal
         FROM tracks t
         JOIN liked_music lm ON lm.track_id = t.id
        ORDER BY lm.liked_at DESC;
     `);
     return (res.values || []).map((r: any) => ({
-      id:         r.id,
-      title:      r.title,
-      artist:     r.artist,
-      album:      r.album,
-      duration:   r.duration,
-      imageUrl:   r.imageUrl,
+      id: r.id,
+      title: r.title,
+      artist: r.artist,
+      album: r.album,
+      duration: r.duration,
+      imageUrl: r.imageUrl,
       previewUrl: r.previewUrl,
-      spotifyId:  r.spotifyId,
-      liked:      true
+      spotifyId: r.spotifyId,
+      liked: true,
+      isLocal: !!r.isLocal
     }));
   }
 
@@ -233,10 +254,37 @@ export class StorageService {
 
   async removeDownloaded(trackId: string): Promise<boolean> {
     await this.ensureInit();
+
+    // First get the file URI
+    const res = await this.db.query(
+      `SELECT file_uri FROM downloaded_music WHERE track_id = ?;`,
+      [trackId]
+    );
+
+    if (res.values && res.values.length > 0) {
+      const fileUri = res.values[0].file_uri;
+
+      // Delete the actual file
+      try {
+        if (fileUri && fileUri.startsWith('file://')) {
+          const filePath = fileUri.replace(/^file:\/\//, '');
+          await Filesystem.deleteFile({
+            path: filePath,
+            directory: Directory.Data
+          });
+        }
+      } catch (err) {
+        console.error('Error deleting file:', err);
+        // Continue despite file deletion error
+      }
+    }
+
+    // Remove from database
     await this.db.run(
       `DELETE FROM downloaded_music WHERE track_id = ?;`,
       [trackId]
     );
+
     return true;
   }
 
@@ -256,15 +304,16 @@ export class StorageService {
       `INSERT OR REPLACE INTO tracks
          (id, title, artist, album,
           duration, image_url, preview_url,
-          spotify_id, liked)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          spotify_id, liked, is_local)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
       [
         track.id,
         track.title, track.artist, track.album,
         track.duration,
         track.imageUrl, track.previewUrl,
         track.spotifyId,
-        track.liked ? 1 : 0
+        track.liked ? 1 : 0,
+        track.isLocal ? 1 : 0
       ]
     );
     return true;
@@ -276,7 +325,24 @@ export class StorageService {
       `SELECT * FROM tracks WHERE id = ?;`,
       [trackId]
     );
-    return res.values?.[0] || null;
+
+    if (res.values && res.values.length > 0) {
+      const track = res.values[0];
+      return {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        duration: track.duration,
+        imageUrl: track.image_url,
+        previewUrl: track.preview_url,
+        spotifyId: track.spotify_id,
+        liked: !!track.liked,
+        isLocal: !!track.is_local
+      };
+    }
+
+    return null;
   }
 
   // ---------- Execute Raw SQL ----------
@@ -326,41 +392,38 @@ export class StorageService {
     }
   }
 
-  private async initSettingsTable(): Promise<void> {
-    await this.db.execute(`
-      CREATE TABLE IF NOT EXISTS settings (
-        key TEXT PRIMARY KEY,
-        value TEXT
-      );
-    `);
-  }
-
-/**
- * Save a local music file
- */
+  /**
+   * Save a local music file
+   */
   async saveLocalMusic(track: Track): Promise<boolean> {
     await this.ensureInit();
 
-    // First save the track data
-    await this.saveTrack(track);
+    // Ensure the track is marked as local
+    const trackWithLocal = {
+      ...track,
+      isLocal: true
+    };
 
-    // Then add it to the downloaded music table
+    // Save the track data with the local flag
+    await this.saveTrack(trackWithLocal);
+
+    // Add it to the downloaded music table
     await this.addDownloaded(track.id, track.previewUrl);
 
     return true;
   }
 
-/**
- * Get all downloaded tracks with full track info
- */
+  /**
+   * Get all downloaded tracks with full track info
+   */
   async getDownloadedTracksWithInfo(): Promise<Track[]> {
     await this.ensureInit();
     const res = await this.db.query(`
       SELECT t.id, t.title, t.artist, t.album,
-            t.duration, t.image_url AS imageUrl,
-            t.preview_url AS previewUrl,
-            t.spotify_id AS spotifyId,
-            t.liked
+             t.duration, t.image_url AS imageUrl,
+             t.preview_url AS previewUrl,
+             t.spotify_id AS spotifyId,
+             t.liked, t.is_local AS isLocal
         FROM tracks t
         JOIN downloaded_music dm ON dm.track_id = t.id
       ORDER BY dm.downloaded_at DESC;
@@ -375,7 +438,23 @@ export class StorageService {
       imageUrl: r.imageUrl,
       previewUrl: r.previewUrl,
       spotifyId: r.spotifyId,
-      liked: !!r.liked
+      liked: !!r.liked,
+      isLocal: !!r.isLocal
     }));
+  }
+
+  /**
+   * Check if a file exists in the app's data directory
+   */
+  async fileExists(path: string): Promise<boolean> {
+    try {
+      await Filesystem.stat({
+        path,
+        directory: Directory.Data
+      });
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 }

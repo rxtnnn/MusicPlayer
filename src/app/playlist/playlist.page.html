@@ -37,31 +37,39 @@
         <fa-icon [icon]="['fas','download']" size="lg"></fa-icon>
       </div>
       <div class="downloaded-songs-info">
-        <h2>Downloaded Music</h2>
+        <h2>Local Music</h2>
         <p>{{ downloadedTracks.length }} songs</p>
       </div>
     </div>
     <!-- User Playlists Grid -->
     <div class="playlists-grid">
-      <!-- Create Playlist Button -->
-      <div class="create-playlist-card" (click)="createPlaylist()">
-        <div class="create-playlist-button">
-          <fa-icon [icon]="['fas','plus']" size="lg"></fa-icon>
-        </div>
-        <h3>Create Playlist</h3>
-      </div>
-
-       <div *ngFor="let playlist of playlists"
-           class="playlist-card"
-           (click)="selectPlaylist(playlist)">
-        <div class="playlist-card-art">
-          <fa-icon [icon]="['fas','music']" size="lg"></fa-icon>
-        </div>
-        <h3>{{ playlist.name }}</h3>
-        <p>{{ playlist.trackCount || 0 }} songs</p>
-      </div>
+      <ion-item-sliding *ngFor="let playlist of playlists">
+         <ion-item (click)="selectPlaylist(playlist)">
+           <div class="playlist-card">
+             <div class="playlist-card-art">
+               <fa-icon [icon]="['fas','music']" size="lg"></fa-icon>
+             </div>
+             <div class="playlist-info">
+               <h3>{{ playlist.name }}</h3>
+               <p>{{ playlist.trackCount || 0 }} songs</p>
+             </div>
+           </div>
+         </ion-item>
+        <ion-item-options side="end">
+          <ion-item-option color="danger"
+                           (click)="confirmDeletePlaylist(playlist)">
+            <ion-icon slot="icon-only" name="trash"></ion-icon>
+          </ion-item-option>
+        </ion-item-options>
+      </ion-item-sliding>
     </div>
 
+    <!-- FAB Button for Create Playlist -->
+    <ion-fab vertical="bottom" horizontal="end" slot="fixed">
+      <ion-fab-button color="secondary" (click)="createPlaylist()">
+        <ion-icon name="add"></ion-icon>
+      </ion-fab-button>
+    </ion-fab>
   </ng-container>
 
   <!-- Playlist Detail View -->
