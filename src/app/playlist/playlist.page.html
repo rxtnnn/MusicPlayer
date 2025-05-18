@@ -30,13 +30,13 @@
         <p>{{ likedTracks.length }} songs</p>
       </div>
     </div>
-     <!-- Downloaded Songs -->
-    <div class="downloaded-songs-card"
-        (click)="selectDownloadedMusic()">
-      <div class="downloaded-songs-gradient">
+     <!-- Local Music -->
+    <div class="uploaded-songs-card"
+        (click)="selectUploadedMusic()">
+      <div class="uploaded-songs-gradient">
         <fa-icon [icon]="['fas','download']" size="lg"></fa-icon>
       </div>
-      <div class="downloaded-songs-info">
+      <div class="uploaded-songs-info">
         <h2>Local Music</h2>
         <p>{{ downloadedTracks.length }} songs</p>
       </div>
@@ -121,12 +121,15 @@
           </div>
         </div>
         <div class="track-item-right">
-          <button class="like-button"
-                  (click)="toggleLike(track); $event.stopPropagation()">
-            <fa-icon [icon]="['fas','heart']"
-                     [ngClass]="{'liked': track.liked}">
-            </fa-icon>
+          <button class="like-button" (click)="toggleTrack(track); $event.stopPropagation()">
+            <fa-icon
+            [icon]="
+              (audio.getCurrentTrack() | async)?.id === track.id &&
+                (audio.getIsPlaying()    | async)
+                  ? ['fas','pause']
+                  : ['fas','play']"></fa-icon>
           </button>
+
           <button class="more-button" (click)="$event.stopPropagation()">
             <fa-icon [icon]="['fas','ellipsis-v']"></fa-icon>
           </button>

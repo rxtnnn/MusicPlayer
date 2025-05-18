@@ -25,7 +25,7 @@ export class AudioService {
   // Use separate Audio objects for better control
   private audioPlayer: HTMLAudioElement;
   private localAudioPlayer: HTMLAudioElement;
-
+  private _savedPosition: number | undefined = undefined;
   private currentTrack$ = new BehaviorSubject<Track | null>(null);
   private isPlaying$ = new BehaviorSubject<boolean>(false);
   private currentTime$ = new BehaviorSubject<number>(0);
@@ -40,34 +40,22 @@ export class AudioService {
     private storage: StorageService,
     private platform: Platform
   ) {
-    // Create separate audio players for different types of content
     this.audioPlayer = new Audio();
     this.localAudioPlayer = new Audio();
-
-    // Configure audio elements
     this.configureAudioElement(this.audioPlayer);
     this.configureAudioElement(this.localAudioPlayer);
-
-    // Initial state setup
     this.setupAudioEvents();
     this.restoreLastTrack();
   }
 
-  // Configure audio element with optimal settings
   private configureAudioElement(audio: HTMLAudioElement) {
     audio.autoplay = false;
     audio.preload = 'auto';
     audio.crossOrigin = 'anonymous';
     audio.volume = 1.0;
-
-    // Fix for iOS
-    audio.setAttribute('playsinline', 'true');
-    audio.setAttribute('webkit-playsinline', 'true');
   }
 
-  // Set up events on both audio elements
   private setupAudioEvents() {
-    // Main audio player events
     this.audioPlayer.addEventListener('loadedmetadata', () => {
       console.log('Audio loadedmetadata event, duration:', this.audioPlayer.duration);
       this.duration$.next(this.audioPlayer.duration);
@@ -189,7 +177,6 @@ export class AudioService {
   }
 
   async play(track: Track): Promise<void> {
-    console.log('Playing track:', track);
     this.cleanup();
     this.currentTrack$.next(track);
     this.saveLastTrack(track);
@@ -303,13 +290,51 @@ export class AudioService {
   async pause(): Promise<void> {
     try {
       const activePlayer = this.getCurrentPlayer();
+      this._savedPosition = activePlayer.currentTime;
       activePlayer.pause();
       this.isPlaying$.next(false);
     } catch (error) {
-      console.error('Error pausing:', error);
+      throw error;
+    }
+    if (this.currentTrack$.getValue()) {
+      await this.storage.set(`position_${this.currentTrack$.getValue()?.id}`, this.getCurrentPlayer().currentTime);
     }
   }
 
+  async resume(position?: number): Promise<void> {
+    try {
+      const track = this.currentTrack$.getValue();
+      if (!track) {
+        throw new Error('No track selected to resume');
+      }
+
+      const activePlayer = this.getCurrentPlayer();
+
+      // If a specific position is provided, seek to it
+      if (position !== undefined && !isNaN(position)) {
+        console.log('Resuming to specific position:', position);
+        activePlayer.currentTime = position;
+      }
+      // Otherwise use the previously saved position if available
+      else if (this._savedPosition !== undefined && !isNaN(this._savedPosition)) {
+        console.log('Resuming to saved position:', this._savedPosition);
+        activePlayer.currentTime = this._savedPosition;
+      }
+
+      // Start playback
+      try {
+        await activePlayer.play();
+        this.isPlaying$.next(true);
+        this.startUpdates();
+      } catch (playError) {
+        console.error('Error resuming playback:', playError);
+        throw playError;
+      }
+    } catch (error) {
+      console.error('Error in resume:', error);
+      throw error;
+    }
+  }
   async verifyLocalTrack(trackId: string): Promise<boolean> {
     try {
       // Get track from database
@@ -346,9 +371,10 @@ export class AudioService {
       return false;
     }
   }
-  // REVISED TOGGLE PLAY
+
   async togglePlay(): Promise<void> {
     try {
+      this.cleanup();
       const isPlaying = this.isPlaying$.getValue();
       const track = this.currentTrack$.getValue();
 
@@ -360,24 +386,8 @@ export class AudioService {
         // Currently playing, so pause
         await this.pause();
       } else {
-        // For local tracks, always restart playback instead of resuming
-        // This fixes many issues with toggle play
-        if (track.isLocal) {
-          await this.play(track);
-        } else {
-          // For streaming tracks, use standard resume
-          const activePlayer = this.getCurrentPlayer();
-
-          try {
-            await activePlayer.play();
-            this.isPlaying$.next(true);
-            this.startUpdates();
-          } catch (playError) {
-            console.error('Error resuming playback:', playError);
-            // Try full playback restart
-            await this.play(track);
-          }
-        }
+        // Currently paused, so resume from saved position
+        await this.resume();
       }
     } catch (error) {
       console.error('Error in togglePlay:', error);
@@ -428,6 +438,9 @@ export class AudioService {
     console.log(`Seeking to time: ${time}`);
     const activePlayer = this.getCurrentPlayer();
     activePlayer.currentTime = time;
+
+    // Update the saved position to match
+    this._savedPosition = time;
   }
 
   async toggleLike(track: Track): Promise<void> {
@@ -585,11 +598,14 @@ export class AudioService {
     }
   }
 
-  // Resource cleanup
   cleanup(): void {
     // Stop both players
     this.audioPlayer.pause();
     this.localAudioPlayer.pause();
+
+    // Reset positions to beginning
+    this.audioPlayer.currentTime = 0;
+    this.localAudioPlayer.currentTime = 0;
 
     // Revoke any existing blob URLs
     if (this._currentBlobUrl) {
@@ -598,6 +614,9 @@ export class AudioService {
       this._currentBlobUrl = null;
     }
 
+    // Always clear any saved position
+    this._savedPosition = undefined;
+
     // Stop time updates
     if (this.timerId) {
       clearInterval(this.timerId);
@@ -605,21 +624,64 @@ export class AudioService {
     }
   }
 
-  // Clear current track completely
   public async clearCurrentTrack(): Promise<void> {
     try {
+      // First pause playback if it's playing
       await this.pause();
-    } catch {
-      // Ignore pause errors
+
+      // Reset the current track
+      this.currentTrack$.next(null);
+      this.isPlaying$.next(false);
+
+      // Reset time positions
+      this.currentTime$.next(0);
+      this.duration$.next(0);
+
+      // Reset audio elements and their positions
+      this.audioPlayer.src = '';
+      this.audioPlayer.currentTime = 0;
+
+      this.localAudioPlayer.src = '';
+      this.localAudioPlayer.currentTime = 0;
+
+      // Clear any saved position
+      if (this._savedPosition !== undefined) {
+        this._savedPosition = undefined;
+      }
+
+      // Remove the last played track from storage
+      await this.storage.set('last_played_track', null);
+
+      console.log('Track cleared, all positions reset');
+    } catch (error) {
+      console.error('Error clearing current track:', error);
     }
+  }
 
-    this.currentTrack$.next(null);
-    this.isPlaying$.next(false);
-    this.currentTime$.next(0);
-    this.duration$.next(0);
+  async pauseAndReset(): Promise<void> {
+    try {
+      // Get current player
+      const activePlayer = this.getCurrentPlayer();
 
-    this.audioPlayer.src = '';
-    this.localAudioPlayer.src = '';
-    await this.storage.set('last_played_track', null);
+      // Pause playback
+      activePlayer.pause();
+      this.isPlaying$.next(false);
+
+      // Reset position to beginning
+      activePlayer.currentTime = 0;
+      this.currentTime$.next(0);
+
+      // Clear any saved position
+      this._savedPosition = undefined;
+
+      // Stop updates
+      if (this.timerId) {
+        clearInterval(this.timerId);
+        this.timerId = null;
+      }
+    } catch (error) {
+      console.error('Error pausing and resetting playback:', error);
+      throw error;
+    }
   }
 }

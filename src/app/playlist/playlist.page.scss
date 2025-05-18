@@ -61,7 +61,7 @@ ion-toolbar{
 }
 
 // Downloaded Songs card
-.downloaded-songs-card {
+.uploaded-songs-card {
   display: flex;
   align-items: center;
   background: linear-gradient(135deg, #3e86fa 0%, #3a66e0 100%);
@@ -75,7 +75,7 @@ ion-toolbar{
     transform: scale(1.02);
   }
 
-  .downloaded-songs-gradient {
+  .uploaded-songs-gradient {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -86,7 +86,7 @@ ion-toolbar{
     margin-right: 20px;
   }
 
-  .downloaded-songs-info {
+  .uploaded-songs-info {
     h2 {
       font-size: 20px;
       font-weight: 700;
@@ -115,7 +115,9 @@ ion-toolbar{
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 10px 0;
+  border-radius: 16px;
+  padding: 20px;
+  margin: 16px;
 
   .playlist-card-art {
     display: flex;
@@ -211,13 +213,8 @@ ion-fab {
     align-items: center;
     padding: 12px;
     margin-bottom: 12px;
-    background-color: var(--ion-color-dark-tint);
     border-radius: 12px;
     transition: background-color 0.3s ease;
-
-    &:hover {
-      background-color: var(--ion-color-dark-shade);
-    }
 
     .track-item-left {
       display: flex;

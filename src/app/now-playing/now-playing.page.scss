@@ -145,23 +145,65 @@
 }
 
 // Progress Bar
+// Progress Bar
 .progress-container {
   margin-bottom: 30px;
+  padding: 0 5px;
+  position: relative;
+}
 
-  .progress-bar {
-    --bar-background: rgba(255, 255, 255, 0.2);
-    --bar-background-active: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
-    --bar-height: 4px;
-    --knob-background: var(--ion-color-secondary);
-    --knob-size: 14px;
-    padding: 0;
-  }
+.progress-bar {
+  --bar-background: rgba(255, 255, 255, 0.2);
+  --bar-background-active: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
+  --bar-height: 4px;
+  --bar-border-radius: 2px;
+  --knob-background: var(--ion-color-primary);
+  --knob-size: 14px;
+  --pin-background: var(--ion-color-primary);
+  padding: 0;
+  margin: 0;
+}
 
-  .time-display {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    margin-top: 10px;
+.progress-bar.dark-mode {
+  --bar-background: rgba(255, 255, 255, 0.2);
+}
+
+// Improve knob visibility
+ion-range::part(knob) {
+  background: var(--ion-color-primary);
+  box-shadow: 0 0 0 3px rgba(var(--ion-color-primary-rgb), 0.3);
+}
+
+// Improve active track appearance
+ion-range::part(bar-active) {
+  background: linear-gradient(135deg, var(--ion-color-primary) 0%, var(--ion-color-secondary) 100%);
+}
+
+.time-display {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 0 2px;
+}
+
+.current-time, .total-time {
+  font-variant-numeric: tabular-nums; // For better number alignment
+  font-weight: 500;
+}
+// Time Display
+.time-display {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  padding: 0 2px;
+
+  .current-time, .total-time {
+    font-variant-numeric: tabular-nums; // For better number alignment
+    font-weight: 500;
   }
 }
 

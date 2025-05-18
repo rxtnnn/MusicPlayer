@@ -125,18 +125,40 @@ export class NowPlayingPage implements OnInit, OnDestroy {
 
   async togglePlay() {
     if (!this.currentTrack) return;
-    await this.audioService.togglePlay();
-  }
-  // Play/Pause
-  seek(event: any) {
-    const t = event.detail.value as number;
-    this.audioService.seek(t);
+
+    try {
+      if (this.isPlaying) {
+        await this.audioService.pause();
+      } else {
+        await this.audioService.resume(this.currentTime);
+      }
+    } catch (error) {
+      throw new Error('Error toggling play/pause: ' + error);
+    }
   }
 
-  // Prev/Next
+  seek(event: any) {
+    try {
+      const newValue = event.detail.value;
+
+      // Update the time immediately for responsive UI
+      this.currentTime = newValue;
+
+      // Seek the audio to the new position
+      this.audioService.seek(newValue);
+    } catch (error) {
+      console.error('Error seeking:', error);
+    }
+  }
+  onSeekDrag(event: any) {
+    // event.detail.value is the new slider position
+    this.currentTime = event.detail.value;
+  }
+
   previous() {
     this.audioService.previous();
   }
+
   next() {
     this.audioService.next();
   }

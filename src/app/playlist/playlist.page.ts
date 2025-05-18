@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy } from '@angular/core';
 import { AlertController } from '@ionic/angular';
 import { AudioService, Track } from '../services/audio.service';
 import { StorageService } from '../services/storage.service';
-import { Subscription } from 'rxjs';
+import { firstValueFrom, Subscription } from 'rxjs';
 import { SettingsService } from '../services/settings.service';
 import { Router } from '@angular/router';
 
@@ -30,7 +30,7 @@ export class PlaylistsPage implements OnInit, OnDestroy {
   private settingsSubscription?: Subscription;
 
   constructor(
-    private audio: AudioService,
+    public audio: AudioService,
     private storage: StorageService,
     private alertCtrl: AlertController,
     private settingsService: SettingsService,
@@ -56,21 +56,17 @@ export class PlaylistsPage implements OnInit, OnDestroy {
   }
 
   async ionViewWillEnter() {
-    // Refresh data when returning to this page
     await this.loadPlaylists();
     await this.loadLikedTracks();
     await this.loadLocalTracks();
 
-    // Refresh selected playlist if one was selected
     if (this.selectedPlaylist) {
       if (this.selectedPlaylist.id === -1) {
-        // Liked music
         await this.loadLikedTracks();
       } else if (this.selectedPlaylist.id === -2) {
         await this.loadLocalTracks();
         this.playlistTracks = [...this.downloadedTracks];
       } else {
-        // Regular playlist
         await this.loadPlaylistTracks(this.selectedPlaylist.id);
       }
     }
@@ -89,7 +85,7 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     }
   }
 
-  async selectDownloadedMusic() {
+  async selectUploadedMusic() {
     this.selectedPlaylist = { id: -2, name: 'Local Music', created_at: '' };
     this.playlistTracks = await this.storage.getLocalTracks();
   }
@@ -176,31 +172,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
       console.error(`Error loading tracks for playlist ${id}:`, error);
       this.playlistTracks = [];
       await this.showAlert('Error', 'Failed to load playlist tracks.');
-    }
-  }
-
-  async toggleLike(track: Track) {
-    try {
-      // Toggle liked state in storage
-      if (track.liked) {
-        await this.storage.removeLiked(track.id);
-      } else {
-        await this.storage.addLiked(track.id);
-      }
-
-      // Update the track object in UI
-      track.liked = !track.liked;
-
-      // Refresh liked tracks list
-      await this.loadLikedTracks();
-
-      // If we're currently viewing liked tracks, refresh that view
-      if (this.selectedPlaylist?.id === -1) {
-        this.playlistTracks = [...this.likedTracks];
-      }
-    } catch (error) {
-      console.error('Error toggling track like status:', error);
-      await this.showAlert('Error', 'Failed to update liked status.');
     }
   }
 
@@ -291,16 +262,28 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     await confirmAlert.present();
   }
 
+  async toggleTrack(track: Track): Promise<void> {
+    try {
+      this.audio.cleanup();
+      const current  = await firstValueFrom(this.audio.getCurrentTrack());
+      const playing  = await firstValueFrom(this.audio.getIsPlaying());
+
+      if (current?.id === track.id && playing) {
+        await this.audio.pause();
+      } else {
+        await this.audio.play(track);
+      }
+    } catch (err) {
+      console.error('Error toggling track playback:', err);
+    }
+  }
+
   playTrack(track: Track) {
-    // For local tracks, ensure they're fully loaded
     if (track.isLocal) {
-      // Pass track to AudioService which handles local tracks properly
       this.audio.play(track);
     } else {
-      // For streaming tracks, use standard play
       this.audio.play(track);
     }
-
     this.router.navigate(['/now-playing']);
   }
 
@@ -316,13 +299,8 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     }
 
     if (tracks.length > 0) {
-      // Set the entire queue
       this.audio.setQueue(tracks);
-
-      // Start playing the first track
       this.audio.play(tracks[0]);
-
-      // Navigate to now playing page
       this.router.navigate(['/now-playing']);
     } else {
       this.showAlert('No tracks', 'This playlist contains no tracks to play.');
@@ -343,7 +321,7 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     this.playlistTracks = [];
   }
 
-    // near the top of the class, under your other async methods
+
   async confirmDeletePlaylist(pl: Playlist) {
     const alert = await this.alertCtrl.create({
       header: 'Delete Playlist',
@@ -354,17 +332,14 @@ export class PlaylistsPage implements OnInit, OnDestroy {
           text: 'Delete',
           handler: async () => {
             try {
-              // delete the playlist row
               await this.storage.executeSql(
                 'DELETE FROM playlists WHERE id = ?;',
                 [pl.id]
               );
-              // remove any orphaned playlist_tracks
               await this.storage.executeSql(
                 'DELETE FROM playlist_tracks WHERE playlist_id = ?;',
                 [pl.id]
               );
-              // refresh UI
               await this.loadPlaylists();
               this.backToList();
             } catch (err) {
@@ -377,5 +352,4 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     });
     await alert.present();
   }
-
 }

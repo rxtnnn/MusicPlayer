@@ -58,6 +58,11 @@ export class HomePage implements OnInit, OnDestroy {
   showGenreTracks: boolean | any;
   genreTracks: Track[] | any;
 
+  //mini-player
+  slideOffset = 0;
+  touchStartY = 0;
+  dismissThreshold = 80;
+  hideMiniPlayer = false;
 
   constructor(
     public audioService: AudioService,
@@ -91,6 +96,8 @@ export class HomePage implements OnInit, OnDestroy {
     await this.storageService.ensureInit();
     await this.refreshLocalMusic();
     await this.loadInitialData();
+    this.hideMiniPlayer = false;
+    this.slideOffset = 0;
   }
 
   ngOnDestroy() {
@@ -196,48 +203,66 @@ export class HomePage implements OnInit, OnDestroy {
 
   async onFileSelected(evt: Event) {
     const input = evt.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
+    if (!input.files?.length) return;
 
-    // Create loading indicator
-    const loading = await this.loadingCtrl.create({
-      message: 'Uploading music...'
-    });
+    // 1) Compute existing file names (you could also compare by some ID you store)
+    const existingNames = new Set(this.localMusic.map(t => t.title));
+
+    // 2) Partition the FileList
+    const files = Array.from(input.files);
+    const newFiles = files.filter(f => !existingNames.has(f.name));
+    const dupFiles = files.filter(f => existingNames.has(f.name));
+
+    // 3) Report duplicates
+    if (dupFiles.length) {
+      const dupToast = await this.toastCtrl.create({
+        message: `Skipped ${dupFiles.length} duplicate file(s).`,
+        duration: 2000,
+        position: 'bottom',
+        color: 'warning'
+      });
+      await dupToast.present();
+    }
+
+    if (!newFiles.length) {
+      input.value = '';
+      return;  // nothing left to upload
+    }
+
+    // 4) Show loading spinner
+    const loading = await this.loadingCtrl.create({ message: 'Uploading music…' });
     await loading.present();
 
     try {
-      for (const file of Array.from(input.files)) {
-        console.log('Processing file:', file.name);
-
-        // Add the track using AudioService
+      for (const file of newFiles) {
+        // your existing upload logic
         const track = await this.audioService.addLocalTrack(file);
-
-        // Show toast message
-        const toast = await this.toastCtrl.create({
+        const okToast = await this.toastCtrl.create({
           message: `"${track.title}" uploaded successfully!`,
-          duration: 2000,
+          duration: 1500,
           position: 'bottom',
           color: 'success'
         });
-        await toast.present();
-
-        // Refresh local music list
-        await this.refreshLocalMusic();
+        await okToast.present();
       }
+
+      // 5) Refresh once, after all newFiles
+      await this.refreshLocalMusic();
     } catch (error) {
       console.error('Error uploading file:', error);
-      const toast = await this.toastCtrl.create({
-        message: 'Error uploading file. Please try again.',
+      const errToast = await this.toastCtrl.create({
+        message: 'Error uploading some files.',
         duration: 2000,
         position: 'bottom',
         color: 'danger'
       });
-      await toast.present();
+      await errToast.present();
     } finally {
-      // Clear file input so you can re-select the same file later
-      input.value = '';
+      input.value = '';    // so the same file can be re-selected later
       loading.dismiss();
     }
   }
+
 
   /** Toggle play/pause local */
   toggleLocalPlay() {
@@ -256,17 +281,15 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
  playTrack(track: Track) {
-    // For local tracks, ensure they're fully loaded
+  this.hideMiniPlayer = false;
     if (track.isLocal) {
-      // Pass track to AudioService which handles local tracks properly
       this.audioService.play(track);
     } else {
-      // For streaming tracks, use standard play
       this.audioService.play(track);
     }
-
     this.router.navigate(['/now-playing']);
   }
+
   playPlaylist(playlistId: string) {
     this.musicService
       .getPlaylistTracks(playlistId)
@@ -475,5 +498,66 @@ export class HomePage implements OnInit, OnDestroy {
       // Always complete the refresher
       event.target.complete();
     }
+  }
+
+  onTouchStart(event: TouchEvent) {
+    this.touchStartY = event.touches[0].clientY;
+    // Prevent default behavior only when needed
+    event.stopPropagation();
+  }
+
+  onTouchMove(event: TouchEvent) {
+    // Calculate how far the user has dragged down
+    const touchY = event.touches[0].clientY;
+    const deltaY = touchY - this.touchStartY;
+
+    // Only allow dragging down, not up
+    if (deltaY >= 0) {
+      this.slideOffset = deltaY;
+    } else {
+      this.slideOffset = 0;
+    }
+
+    // Prevent other touch interactions while dragging
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  async onTouchEnd(event: TouchEvent) {
+    // If user has dragged enough, dismiss the player
+    if (this.slideOffset > this.dismissThreshold) {
+      // Add closing class for animation
+      const miniPlayer = event.currentTarget as HTMLElement;
+      miniPlayer.classList.add('closing');
+
+      try {
+        // Pause and reset position without clearing track info
+        await this.audioService.pauseAndReset();
+
+        // Show a toast notification
+        const toast = await this.toastCtrl.create({
+          message: 'Playback stopped',
+          duration: 1500,
+          position: 'bottom',
+          color: 'medium'
+        });
+        await toast.present();
+
+        // Hide mini player visually but keep track info
+        setTimeout(() => {
+          this.hideMiniPlayer = true;
+        }, 300); // Match this to your animation duration
+
+        console.log('Playback stopped, mini player hidden until next track');
+      } catch (error) {
+        console.error('Error stopping playback:', error);
+      }
+    } else {
+      // Not enough to dismiss, reset position
+      this.slideOffset = 0;
+    }
+
+    // Ensure propagation is stopped
+    event.stopPropagation();
   }
 }

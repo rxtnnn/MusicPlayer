@@ -239,32 +239,36 @@
 
   <!-- Mini Player -->
   <div
-    class="mini-player"
-    *ngIf="(audioService.getCurrentTrack() | async) as currentTrack"
-  >
-    <div class="mini-player-left" [routerLink]="['/now-playing']">
-      <img
-        [src]="currentTrack.imageUrl || 'assets/placeholder.png'"
-        class="mini-player-thumbnail"
-      />
-      <div class="mini-player-info">
-        <h4 class="mini-player-title">{{ currentTrack.title }}</h4>
-        <p class="mini-player-artist">{{ currentTrack.artist }}</p>
-      </div>
+  class="mini-player"
+  *ngIf="(audioService.getCurrentTrack() | async) as currentTrack"
+  (touchstart)="onTouchStart($event)"
+  (touchmove)="onTouchMove($event)"
+  (touchend)="onTouchEnd($event)"
+  [style.transform]="'translateY(' + slideOffset + 'px)'"
+  [style.opacity]="1 - (slideOffset / 100)">
+  <div class="mini-player-left" [routerLink]="['/now-playing']">
+    <img
+      [src]="currentTrack.imageUrl || 'assets/placeholder.png'"
+      class="mini-player-thumbnail"
+    />
+    <div class="mini-player-info">
+      <h4 class="mini-player-title">{{ currentTrack.title }}</h4>
+      <p class="mini-player-artist">{{ currentTrack.artist }}</p>
     </div>
-    <div class="mini-player-controls">
-      <fa-icon
-        [icon]="['fas', 'step-backward']"
-        (click)="audioService.previous()"
-      ></fa-icon>
-      <fa-icon
-        [icon]="(audioService.getIsPlaying() | async) ? ['fas', 'pause'] : ['fas', 'play']"
-        (click)="audioService.togglePlay()"
-      ></fa-icon>
-      <fa-icon
-        [icon]="['fas', 'step-forward']"
-        (click)="audioService.next()"
-      ></fa-icon>
-    </div>
+  </div>
+  <div class="mini-player-controls">
+    <fa-icon
+      [icon]="['fas', 'step-backward']"
+      (click)="audioService.previous()"
+    ></fa-icon>
+    <fa-icon
+      [icon]="(audioService.getIsPlaying() | async) ? ['fas', 'pause'] : ['fas', 'play']"
+      (click)="audioService.togglePlay()"
+    ></fa-icon>
+    <fa-icon
+      [icon]="['fas', 'step-forward']"
+      (click)="audioService.next()"
+    ></fa-icon>
+  </div>
   </div>
 </ion-content>

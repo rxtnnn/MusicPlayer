@@ -31,11 +31,17 @@
 
     <!-- Progress Bar -->
     <div class="progress-container">
-      <ion-range [(ngModel)]="currentTime"
-                 [max]="duration"
-                 (ionChange)="seek($event)"
-                 class="progress-bar"
-                 [class.dark-mode]="isDarkMode">
+      <ion-range
+        class="progress-bar"
+        [min]="0"
+        [max]="duration"
+        [value]="currentTime"
+        [class.dark-mode]="isDarkMode"
+        (ionInput)="onSeekDrag($event)"
+        (ionChange)="seek($event)"
+        snaps="false"
+        pin="true"
+        >
       </ion-range>
       <div class="time-display">
         <span class="current-time">{{formatTime(currentTime)}}</span>
