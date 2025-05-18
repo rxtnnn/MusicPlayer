@@ -126,22 +126,19 @@ export class PlaylistsPage implements OnInit, OnDestroy {
           handler: async (data) => {
             const name = (data.name || '').trim();
             if (!name) {
-              return false; // keep dialog open
+              return false;
             }
             try {
               const id = await this.storage.createPlaylist(name);
               if (id > 0) {
-                // Reload entire list so the new card appears
                 await this.loadPlaylists();
-
-                // Show success toast
                 await this.showAlert('Success', 'Playlist created successfully!');
               }
-              return true;  // close dialog
+              return true;
             } catch (error) {
               console.error('Error creating playlist:', error);
               await this.showAlert('Error', 'Failed to create playlist.');
-              return true; // close dialog
+              return true;
             }
           }
         }
@@ -152,15 +149,11 @@ export class PlaylistsPage implements OnInit, OnDestroy {
 
   selectPlaylist(pl: Playlist) {
     this.selectedPlaylist = pl;
-
     if (pl.id === -1) {
-      // Liked tracks
       this.playlistTracks = [...this.likedTracks];
     } else if (pl.id === -2) {
-      // Downloaded tracks
       this.playlistTracks = [...this.downloadedTracks];
     } else {
-      // Regular playlist
       this.loadPlaylistTracks(pl.id);
     }
   }
@@ -176,7 +169,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
   }
 
   async addToPlaylist(track: Track) {
-    // Show a list of playlists to add the track to
     const alert = await this.alertCtrl.create({
       header: 'Add to Playlist',
       buttons: [
@@ -193,9 +185,8 @@ export class PlaylistsPage implements OnInit, OnDestroy {
               const id = parseInt(playlistId, 10);
               await this.storage.addTrackToPlaylist(id, track.id);
               await this.showAlert('Success', 'Track added to playlist.');
-
-              // Refresh playlists
               await this.loadPlaylists();
+
             } catch (error) {
               console.error('Error adding track to playlist:', error);
               await this.showAlert('Error', 'Failed to add track to playlist.');
@@ -205,7 +196,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
       ]
     });
 
-    // Add playlist options
     this.playlists.forEach(playlist => {
       alert.inputs?.push({
         type: 'radio',
@@ -214,7 +204,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
       });
     });
 
-    // Add option to create new playlist
     alert.inputs?.push({
       type: 'radio',
       label: '+ Create New Playlist',
@@ -239,15 +228,13 @@ export class PlaylistsPage implements OnInit, OnDestroy {
           text: 'Remove',
           handler: async () => {
             try {
-              // Remove from playlist in database
+              //remove the playlist in database
               await this.storage.executeSql(
                 'DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?',
                 [this.selectedPlaylist!.id, track.id]
               );
-
-              // Refresh the playlist tracks
+              //refresh the playlist tracks
               await this.loadPlaylistTracks(this.selectedPlaylist!.id);
-
               // Refresh playlists to update track counts
               await this.loadPlaylists();
             } catch (error) {
@@ -258,7 +245,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
         }
       ]
     });
-
     await confirmAlert.present();
   }
 
@@ -267,7 +253,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
       this.audio.cleanup();
       const current  = await firstValueFrom(this.audio.getCurrentTrack());
       const playing  = await firstValueFrom(this.audio.getIsPlaying());
-
       if (current?.id === track.id && playing) {
         await this.audio.pause();
       } else {
@@ -289,7 +274,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
 
   playPlaylist() {
     let tracks: Track[] = [];
-
     if (this.selectedPlaylist?.id === -1) {
       tracks = this.likedTracks;
     } else if (this.selectedPlaylist?.id === -2) {
@@ -297,7 +281,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     } else {
       tracks = this.playlistTracks;
     }
-
     if (tracks.length > 0) {
       this.audio.setQueue(tracks);
       this.audio.play(tracks[0]);
@@ -320,7 +303,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     this.selectedPlaylist = null;
     this.playlistTracks = [];
   }
-
 
   async confirmDeletePlaylist(pl: Playlist) {
     const alert = await this.alertCtrl.create({

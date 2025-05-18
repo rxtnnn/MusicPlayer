@@ -20,17 +20,11 @@ export class MusicService {
     this.loadToken();
   }
 
-  /**
-   * Load the stored token and expiration time
-   */
   private async loadToken() {
     this.authToken = await this.storageService.get('spotify_token');
     this.tokenExpiration = await this.storageService.get('spotify_token_expiration') || 0;
   }
 
-  /**
-   * Save the token and expiration time
-   */
   private saveToken(token: string, expiresIn: number) {
     const expiration = Date.now() + expiresIn * 1000;
     this.authToken = token;
@@ -40,16 +34,10 @@ export class MusicService {
     this.storageService.set('spotify_token_expiration', expiration);
   }
 
-  /**
-   * Check if the current token is valid
-   */
   private isTokenValid(): boolean {
     return this.authToken !== null && Date.now() < this.tokenExpiration;
   }
 
-  /**
-   * Authenticate with Spotify and store the token
-   */
   authenticate(): Observable<boolean> {
     const body = new URLSearchParams();
     body.set('grant_type', 'client_credentials');
@@ -75,18 +63,12 @@ export class MusicService {
     );
   }
 
-  /**
-   * Get the authentication headers
-   */
   private getHeaders(): HttpHeaders {
     return new HttpHeaders({
       'Authorization': `Bearer ${this.authToken}`
     });
   }
 
-  /**
-   * Ensure that the user is authenticated before making a request
-   */
   private ensureAuthenticated(): Observable<boolean> {
     if (this.isTokenValid()) {
       console.log('Token is valid');
@@ -97,9 +79,6 @@ export class MusicService {
     }
   }
 
-  /**
-   * Get new releases from Spotify
-   */
   getNewReleases(country: string = 'US', limit: number = 20): Observable<any> {
     return this.ensureAuthenticated().pipe(
       switchMap(() => {
@@ -121,9 +100,6 @@ export class MusicService {
     );
   }
 
-  /**
-   * Get available genres from Spotify
-   */
   getGenres(country: string = 'US', limit: number = 50): Observable<any> {
     return this.ensureAuthenticated().pipe(
       switchMap(() => {
@@ -269,10 +245,16 @@ export class MusicService {
       })
     );
   }
+  getTrackPreviewUrl(trackId: string): Observable<string> {
+    return this.getTrackById(trackId).pipe(
+      map((track: any) => track?.preview_url || ''),
+      catchError((error) => {
+        console.error('Error fetching track preview URL:', error);
+        return of('');
+      })
+    );
+  }
 
-  /**
-   * Map a Spotify track to our Track model
-   */
   mapSpotifyTrackToModel(item: any): Track {
     return {
       id: item.id || `track-${Date.now()}`,

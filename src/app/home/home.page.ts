@@ -205,15 +205,21 @@ export class HomePage implements OnInit, OnDestroy {
     const input = evt.target as HTMLInputElement;
     if (!input.files?.length) return;
 
-    // 1) Compute existing file names (you could also compare by some ID you store)
-    const existingNames = new Set(this.localMusic.map(t => t.title));
-
-    // 2) Partition the FileList
     const files = Array.from(input.files);
-    const newFiles = files.filter(f => !existingNames.has(f.name));
-    const dupFiles = files.filter(f => existingNames.has(f.name));
 
-    // 3) Report duplicates
+    // 1) Gather existing filenames (basename of localPath, or title)
+    const existingFileNames = new Set(
+      this.localMusic.map(t => {
+        const pathOrTitle = t.localPath || t.title;
+        return pathOrTitle.split('/').pop()!.toLowerCase();
+      })
+    );
+
+    // 2) Split incoming files into new vs. duplicates
+    const newFiles = files.filter(f => !existingFileNames.has(f.name.toLowerCase()));
+    const dupFiles = files.filter(f => existingFileNames.has(f.name.toLowerCase()));
+
+    // 3) Warn about duplicates
     if (dupFiles.length) {
       const dupToast = await this.toastCtrl.create({
         message: `Skipped ${dupFiles.length} duplicate file(s).`,
@@ -226,16 +232,15 @@ export class HomePage implements OnInit, OnDestroy {
 
     if (!newFiles.length) {
       input.value = '';
-      return;  // nothing left to upload
+      return;  // nothing to upload
     }
 
-    // 4) Show loading spinner
+    // 4) Proceed with uploading only newFiles…
     const loading = await this.loadingCtrl.create({ message: 'Uploading music…' });
     await loading.present();
 
     try {
       for (const file of newFiles) {
-        // your existing upload logic
         const track = await this.audioService.addLocalTrack(file);
         const okToast = await this.toastCtrl.create({
           message: `"${track.title}" uploaded successfully!`,
@@ -245,8 +250,6 @@ export class HomePage implements OnInit, OnDestroy {
         });
         await okToast.present();
       }
-
-      // 5) Refresh once, after all newFiles
       await this.refreshLocalMusic();
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -258,13 +261,11 @@ export class HomePage implements OnInit, OnDestroy {
       });
       await errToast.present();
     } finally {
-      input.value = '';    // so the same file can be re-selected later
+      input.value = '';
       loading.dismiss();
     }
   }
 
-
-  /** Toggle play/pause local */
   toggleLocalPlay() {
     if (!this.currentLocal) return;
     if (this.localPlaying) {

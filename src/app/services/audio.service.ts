@@ -22,7 +22,6 @@ export interface Track {
 
 @Injectable({ providedIn: 'root' })
 export class AudioService {
-  // Use separate Audio objects for better control
   private audioPlayer: HTMLAudioElement;
   private localAudioPlayer: HTMLAudioElement;
   private _savedPosition: number | undefined = undefined;
@@ -91,7 +90,6 @@ export class AudioService {
       this.isPlaying$.next(false);
     });
 
-    // Local audio player events (mostly the same)
     this.localAudioPlayer.addEventListener('loadedmetadata', () => {
       console.log('Local audio loadedmetadata event, duration:', this.localAudioPlayer.duration);
       this.duration$.next(this.localAudioPlayer.duration);
@@ -129,7 +127,7 @@ export class AudioService {
   }
 
   private startUpdates() {
-    this.stopUpdates(); // Clear any existing timer
+    this.stopUpdates(); // clear sa timer
     this.timerId = setInterval(() => {
       const activePlayer = this.getCurrentPlayer();
       this.currentTime$.next(activePlayer.currentTime);
@@ -143,7 +141,6 @@ export class AudioService {
     }
   }
 
-  // Get the currently active audio player
   private getCurrentPlayer(): HTMLAudioElement {
     const track = this.currentTrack$.getValue();
     return track?.isLocal ? this.localAudioPlayer : this.audioPlayer;
@@ -153,19 +150,13 @@ export class AudioService {
     try {
       const saved = await this.storage.get('last_played_track') as Track | null;
       if (saved) {
-        console.log('Restoring last played track:', saved.title);
-
-        // Check if the track still exists
         if (saved.isLocal) {
           const exists = await this.storage.getTrack(saved.id);
           if (!exists) {
-            console.log('Last track no longer exists, not restoring');
             return;
           }
         }
-
         this.currentTrack$.next(saved);
-        // Don't set audio.src here, just prepare the track info
       }
     } catch (err) {
       console.error('[AudioService] restoreLastTrack error:', err);
@@ -187,49 +178,33 @@ export class AudioService {
 
         if (Capacitor.isNativePlatform()) {
           console.log('Playing local track on native platform:', track.previewUrl);
-
-          // Convert the URI to a format the audio element can use
           const audioSrc = Capacitor.convertFileSrc(track.previewUrl);
-          console.log('Converted audio path:', audioSrc);
-
           player.src = audioSrc;
           player.load();
-
           try {
             await player.play();
             this.isPlaying$.next(true);
             this.startUpdates();
           } catch (playError) {
-            console.error('Error playing local audio:', playError);
             throw playError;
           }
         } else {
-          // For web, we need to re-read the file from storage
-          console.log('Playing local track in browser from path:', track.previewUrl);
-
           try {
-            // Read the file from storage with explicit options
             const fileData = await Filesystem.readFile({
               path: track.previewUrl.replace('file://', ''),
               directory: Directory.Data,
-              // Don't specify encoding to get data as base64
             });
 
-            // Create a blob and URL - handle the data properly
             if (fileData.data) {
               let blob: Blob;
               if (fileData.data instanceof Blob) {
-                // Convert Blob to ArrayBuffer, then to base64, then to Blob
                 const arrayBuffer = await fileData.data.arrayBuffer();
                 blob = this.base64ToBlob(this.arrayBufferToBase64(arrayBuffer), 'audio/mpeg');
               } else {
                 blob = this.base64ToBlob(fileData.data, 'audio/mpeg');
               }
               const url = URL.createObjectURL(blob);
-
-              // Save for cleanup later
               this._currentBlobUrl = url;
-
               player.src = url;
               player.load();
               await player.play();
@@ -244,7 +219,6 @@ export class AudioService {
           }
         }
       } else {
-        // Streaming audio code (unchanged)
         this.audioPlayer.src = track.previewUrl;
         this.audioPlayer.load();
         await this.audioPlayer.play();
@@ -256,34 +230,28 @@ export class AudioService {
       throw e;
     }
   }
-    // First, update your base64ToBlob method to handle both string and ArrayBuffer
+
   private base64ToBlob(data: string | ArrayBuffer, mimeType: string): Blob {
-    // If data is already a string (base64), use it directly
     let base64String: string;
 
     if (typeof data === 'string') {
       base64String = data;
     } else {
-      // If it's an ArrayBuffer, convert it to base64 string
       base64String = this.arrayBufferToBase64(data);
     }
 
-    // Now process the base64 string
     const byteCharacters = atob(base64String);
     const byteArrays = [];
 
     for (let offset = 0; offset < byteCharacters.length; offset += 512) {
       const slice = byteCharacters.slice(offset, offset + 512);
       const byteNumbers = new Array(slice.length);
-
       for (let i = 0; i < slice.length; i++) {
         byteNumbers[i] = slice.charCodeAt(i);
       }
-
       const byteArray = new Uint8Array(byteNumbers);
       byteArrays.push(byteArray);
     }
-
     return new Blob(byteArrays, { type: mimeType });
   }
 
@@ -307,15 +275,12 @@ export class AudioService {
       if (!track) {
         throw new Error('No track selected to resume');
       }
-
       const activePlayer = this.getCurrentPlayer();
-
-      // If a specific position is provided, seek to it
       if (position !== undefined && !isNaN(position)) {
         console.log('Resuming to specific position:', position);
         activePlayer.currentTime = position;
       }
-      // Otherwise use the previously saved position if available
+      // previously saved position
       else if (this._savedPosition !== undefined && !isNaN(this._savedPosition)) {
         console.log('Resuming to saved position:', this._savedPosition);
         activePlayer.currentTime = this._savedPosition;

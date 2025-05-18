@@ -115,7 +115,7 @@
             <p>Upload tracks from your device</p>
           </div>
           <div class="upload-button-wrapper">
-            <ion-button fill="solid" shape="round" size="small">
+            <ion-button fill="solid" shape="round" size="small" (click)="openFileSelector()">
               <ion-icon name="add" slot="icon-only" (click)="fileInput.click()"></ion-icon>
             </ion-button>
              <input
