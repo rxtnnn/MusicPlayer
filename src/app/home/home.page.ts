@@ -1,21 +1,26 @@
-// src/app/home/home.page.ts
-
-import { Component, OnInit, ViewChild, ElementRef, NgZone } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  ViewChild,
+  ElementRef,
+  NgZone
+} from '@angular/core';
 import { Router } from '@angular/router';
-import { ToastController, LoadingController, AlertController } from '@ionic/angular';
+import {
+  ToastController,
+  LoadingController,
+  AlertController,
+  Platform
+} from '@ionic/angular';
 import { AudioService, Track } from '../services/audio.service';
 import { StorageService } from '../services/storage.service';
 import { MusicService } from '../services/music.service';
 import { SettingsService } from '../services/settings.service';
-import { firstValueFrom, Observable, of, Subscription } from 'rxjs';
+import { firstValueFrom, of, Subscription } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
-
-interface SpotifyCategory {
-  id: string;
-  name: string;
-  icons?: { url: string }[];
-  href?: string;
-}
+import { Capacitor } from '@capacitor/core';
+import { Directory, Filesystem } from '@capacitor/filesystem';
 
 @Component({
   selector: 'app-home',
@@ -23,32 +28,36 @@ interface SpotifyCategory {
   styleUrls: ['./home.page.scss'],
   standalone: false
 })
-export class HomePage implements OnInit {
+export class HomePage implements OnInit, OnDestroy {
   @ViewChild('searchInput', { read: ElementRef }) searchInput!: ElementRef;
   @ViewChild('fileInput', { static: false }) fileInput!: ElementRef<HTMLInputElement>;
 
-  // Search bar state
+  // ---- Local music ----
+  localMusic: Track[] = [];
+  currentLocal?: Track;
+  localAudio = new Audio();
+  localPlaying = false;
+  localDuration = 0;
+  localCurrentTime = 0;
+
+  // ---- Search/streaming ----
   searchActive = false;
   searchQuery = '';
   searchResults: Track[] = [];
 
-  // Core data
-  categories: SpotifyCategory[] = [];
+  categories: any[] = [];
   newReleases: Track[] = [];
   featuredPlaylists: any[] = [];
   recommendedTracks: Track[] = [];
-  localMusic: Track[] = [];
   selectedCategory = 'all';
+
+  // Settings & loading
+  isDarkMode = false;
   isLoading = false;
-  private settingsSubscription?: Subscription;
-  isDarkMode?: boolean;
+  private settingsSub?: Subscription;
+  showGenreTracks: boolean | any;
+  genreTracks: Track[] | any;
 
-  // Genre tracks
-  genreTracks: Track[] = [];
-  showGenreTracks = false;
-
-  // Flag to show whether we have local music
-  hasLocalMusic = false;
 
   constructor(
     public audioService: AudioService,
@@ -56,185 +65,208 @@ export class HomePage implements OnInit {
     private musicService: MusicService,
     private settingsService: SettingsService,
     private router: Router,
-    private ngZone: NgZone,
-    private toast: ToastController,
+    private toastCtrl: ToastController,
     private loadingCtrl: LoadingController,
-    private alertController: AlertController
+    private alertCtrl: AlertController,
+    private platform: Platform
   ) {}
 
   async ngOnInit() {
-    await this.loadInitialData();
-    this.settingsSubscription = this.settingsService.settings$.subscribe(settings => {
-      this.isDarkMode = settings.darkMode;
-      document.body.setAttribute('color-theme', settings.darkMode ? 'dark' : 'light');
+    // wire up local-audio events
+    this.localAudio.addEventListener('loadedmetadata', () => {
+      this.localDuration = this.localAudio.duration;
     });
-  }
+    this.localAudio.addEventListener('timeupdate', () => {
+      this.localCurrentTime = this.localAudio.currentTime;
+    });
+    this.localAudio.addEventListener('ended', () => {
+      this.localPlaying = false;
+    });
 
-  async ionViewWillEnter() {
-    // Refresh local music whenever returning to this page
+    // Settings subscription
+    this.settingsSub = this.settingsService.settings$.subscribe(s => {
+      this.isDarkMode = s.darkMode;
+      document.body.setAttribute('color-theme', s.darkMode ? 'dark' : 'light');
+    });
+    await this.storageService.ensureInit();
     await this.refreshLocalMusic();
+    await this.loadInitialData();
   }
 
   ngOnDestroy() {
-    if (this.settingsSubscription) {
-      this.settingsSubscription.unsubscribe();
+    this.localAudio.pause();
+    this.localAudio.src = '';
+    this.settingsSub?.unsubscribe();
+  }
+
+  private async loadInitialData() {
+    const load = await this.loadingCtrl.create({ message: 'Loading music…' });
+    await load.present();
+    this.isLoading = true;
+
+    try {
+      // Init storage & local music
+      await this.storageService.ensureInit();
+      await this.refreshLocalMusic();
+
+      // Then try to load streaming content
+      const authOk = await firstValueFrom(this.musicService.authenticate());
+
+      if (authOk) {
+        // Load categories, new releases and playlists in parallel
+        const [cats, newRel, playlists] = await Promise.all([
+          firstValueFrom(this.musicService.getGenres()),
+          firstValueFrom(this.musicService.getNewReleases()),
+          firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
+        ]);
+
+        // Set categories from API
+        this.categories = cats.categories.items;
+
+        // FIXED: Don't include local music in new releases
+        this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+
+        // Set featured playlists
+        this.featuredPlaylists = playlists;
+
+        // FIXED: Don't include local music in recommended tracks
+        this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+      } else {
+        // If authentication fails, set empty arrays for streaming content
+        this.newReleases = [];
+        this.recommendedTracks = [];
+
+        // Show a toast for the user to know streaming content couldn't be loaded
+        const toast = await this.toastCtrl.create({
+          message: 'Could not load streaming content. Only local music is available.',
+          duration: 3000,
+          position: 'bottom',
+          color: 'warning'
+        });
+        await toast.present();
+      }
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+
+      // Set empty arrays for streaming content on error
+      this.newReleases = [];
+      this.recommendedTracks = [];
+
+      // Show error toast
+      const toast = await this.toastCtrl.create({
+        message: 'Error loading streaming content. Only local music is available.',
+        duration: 3000,
+        position: 'bottom',
+        color: 'danger'
+      });
+      await toast.present();
+    } finally {
+      this.isLoading = false;
+      load.dismiss();
     }
   }
 
-  /** Handle file selection for local music upload */
-  async onFileSelected(event: any) {
-    const files: FileList = event.target.files;
-    if (!files || files.length === 0) return;
+  private async refreshLocalMusic() {
+    try {
+      this.localMusic = await this.storageService.getLocalTracks();
+      return this.localMusic;
+    } catch (error) {
+      console.error('Error refreshing local music:', error);
+      throw error;
+    }
+  }
 
-    // Show upload progress indicator
-    const loadingToast = await this.toast.create({
-      message: 'Processing audio file...',
-      duration: 0, // Don't auto-dismiss
-      position: 'top',
-      color: 'primary'
+  async requestAudioPermissions() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      // Request filesystem permissions which include audio access
+      await Filesystem.requestPermissions();
+      return true;
+    } catch (e) {
+      console.error('Error requesting permissions:', e);
+      return false;
+    }
+  }
+  return true; // In web, permissions work differently
+}
+
+  openFileSelector() {
+    this.fileInput.nativeElement.click();
+  }
+
+  async onFileSelected(evt: Event) {
+    const input = evt.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    // Create loading indicator
+    const loading = await this.loadingCtrl.create({
+      message: 'Uploading music...'
     });
-    await loadingToast.present();
+    await loading.present();
 
     try {
-      // Process files one by one
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (const file of Array.from(input.files)) {
+        console.log('Processing file:', file.name);
 
-        // Update toast message for multiple files
-        if (files.length > 1) {
-          loadingToast.message = `Processing file ${i+1} of ${files.length}: ${file.name}`;
-        }
-
-        // Skip non-audio files
-        if (!file.type.startsWith('audio/')) {
-          console.warn(`${file.name} is not a valid audio file.`);
-          continue;
-        }
-
-        // Process the file through our service
+        // Add the track using AudioService
         const track = await this.audioService.addLocalTrack(file);
 
-        // Add to our local music collection
-        this.ngZone.run(() => {
-          this.localMusic.unshift(track);
-          this.hasLocalMusic = true;
-
-          // Also add to new releases for visibility
-          this.newReleases = [track, ...this.newReleases];
-
-          // Add to recommended tracks as well
-          this.recommendedTracks = [track, ...this.recommendedTracks];
+        // Show toast message
+        const toast = await this.toastCtrl.create({
+          message: `"${track.title}" uploaded successfully!`,
+          duration: 2000,
+          position: 'bottom',
+          color: 'success'
         });
+        await toast.present();
+
+        // Refresh local music list
+        await this.refreshLocalMusic();
       }
-
-      // Dismiss loading toast
-      loadingToast.dismiss();
-
-      // Show success message
-      const msg = files.length > 1
-        ? `Added ${files.length} files to your library`
-        : `${files[0].name} added to your library`;
-
-      const toast = await this.toast.create({
-        message: msg,
-        duration: 2000,
-        position: 'bottom',
-        color: 'success'
-      });
-      await toast.present();
-
-      // Update local music in the view
-      await this.refreshLocalMusic();
-
-    } catch (err) {
-      console.error('Error processing audio file:', err);
-
-      // Dismiss loading toast
-      loadingToast.dismiss();
-
-      // Show error message
-      const errToast = await this.toast.create({
-        message: 'Failed to process audio file.',
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      const toast = await this.toastCtrl.create({
+        message: 'Error uploading file. Please try again.',
         duration: 2000,
         position: 'bottom',
         color: 'danger'
       });
-      await errToast.present();
+      await toast.present();
     } finally {
-      // Reset file input
-      this.fileInput.nativeElement.value = '';
+      // Clear file input so you can re-select the same file later
+      input.value = '';
+      loading.dismiss();
     }
   }
 
-  /** Open file selector programmatically */
-  openFileSelector() {
-    if (this.fileInput && this.fileInput.nativeElement) {
-      this.fileInput.nativeElement.click();
-    }
-  }
-
-  /** Play a single track (local or streaming) */
-  playTrack(track: Track) {
-    console.log('Playing track:', track);
-
-    // Different handling for local tracks vs streaming tracks
-    if (track.isLocal) {
-      console.log('Playing local track with path:', track.localPath || track.previewUrl);
-      this.audioService.play(track);
-      this.router.navigate(['/now-playing']);
+  /** Toggle play/pause local */
+  toggleLocalPlay() {
+    if (!this.currentLocal) return;
+    if (this.localPlaying) {
+      this.localAudio.pause();
     } else {
-      // Make sure streaming tracks have a preview URL
-      if (!track.previewUrl) {
-        this.showError('This track doesn\'t have a preview available.');
-        return;
-      }
+      this.localAudio.play();
+    }
+    this.localPlaying = !this.localPlaying;
+  }
 
+  /** Seek local audio */
+  seekLocal(pos: number) {
+    this.localAudio.currentTime = pos;
+  }
+
+ playTrack(track: Track) {
+    // For local tracks, ensure they're fully loaded
+    if (track.isLocal) {
+      // Pass track to AudioService which handles local tracks properly
       this.audioService.play(track);
-      this.router.navigate(['/now-playing']);
+    } else {
+      // For streaming tracks, use standard play
+      this.audioService.play(track);
     }
+
+    this.router.navigate(['/now-playing']);
   }
-
-  /** Load all local music from storage */
-  private async refreshLocalMusic() {
-    try {
-      // Get local tracks from storage
-      const locals = await this.storageService.getLocalTracks();
-
-      this.ngZone.run(() => {
-        this.localMusic = locals;
-        this.hasLocalMusic = locals.length > 0;
-
-        // Also update new releases if needed
-        if (this.newReleases.length === 0) {
-          this.newReleases = [...locals];
-        }
-      });
-
-      // Ensure local tracks are added to the playlist page
-      await this.updateLocalMusicInPlaylist();
-    } catch (error) {
-      console.error('Error refreshing local music:', error);
-    }
-  }
-
-  /** Add local tracks to the "Downloaded Music" section in playlists */
-  private async updateLocalMusicInPlaylist() {
-    try {
-      for (const track of this.localMusic) {
-        // Ensure each local track is properly added to downloaded tracks for playlist page
-        if (track.localPath || track.previewUrl) {
-          await this.storageService.addDownloaded(
-            track.id,
-            track.localPath || track.previewUrl
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error updating local music in playlists:', error);
-    }
-  }
-
-  /** Fetch and play all tracks in a playlist */
   playPlaylist(playlistId: string) {
     this.musicService
       .getPlaylistTracks(playlistId)
@@ -262,74 +294,6 @@ export class HomePage implements OnInit {
       });
   }
 
-  /** Play all local music */
-  playAllLocalMusic() {
-    if (this.localMusic.length === 0) {
-      this.showError('No local music available to play');
-      return;
-    }
-
-    this.audioService.setQueue(this.localMusic);
-    this.router.navigate(['/now-playing']);
-  }
-
-  /** Toggle search bar visibility */
-  toggleSearch() {
-    this.searchActive = !this.searchActive;
-    if (this.searchActive) {
-      // focus the input after the container becomes visible
-      setTimeout(() => this.searchInput.nativeElement.focus(), 200);
-    } else {
-      this.clearSearch();
-    }
-  }
-
-  /** Handle search input changes */
-  onSearch() {
-    const q = this.searchQuery.trim();
-    if (!q) {
-      this.searchResults = [];
-      return;
-    }
-
-    // First look through local music
-    const localResults = this.localMusic.filter(
-      track => track.title.toLowerCase().includes(q.toLowerCase()) ||
-               track.artist.toLowerCase().includes(q.toLowerCase())
-    );
-
-    if (localResults.length > 0) {
-      this.searchResults = localResults;
-    } else {
-      // Fall back to Spotify search
-      this.musicService
-        .searchTracks(q, 20)
-        .pipe(
-          map((res) =>
-            res.tracks.items.map((i: any) => this.mapSpotifyTrack(i))
-          ),
-          catchError((err) => {
-            console.error('Search error', err);
-            return of<Track[]>([]);
-          })
-        )
-        .subscribe((tracks) => {
-          console.log('Search results:', tracks);
-          this.searchResults = tracks;
-        });
-    }
-  }
-
-  onSearchFocus() { /* Search focus handler */ }
-  onSearchBlur() { /* Search blur handler */ }
-
-  /** Clear search query and results */
-  clearSearch() {
-    this.searchQuery = '';
-    this.searchResults = [];
-  }
-
-  /** Change category and load tracks for that genre */
   async selectCategory(categoryId: string) {
     console.log('Selecting category:', categoryId);
     this.selectedCategory = categoryId;
@@ -359,15 +323,15 @@ export class HomePage implements OnInit {
         if (tracks && tracks.length > 0) {
           this.genreTracks = tracks;
           this.showGenreTracks = true;
-          console.log(`Loaded ${tracks.length} tracks for genre ${categoryId}`);
+          console.log('Loaded ${tracks.length} tracks for genre ${categoryId}');
         } else {
           this.showGenreTracks = false;
-          this.showError(`No tracks found for "${categoryId}".`);
+          this.showError('No tracks found for "${categoryId}"');
         }
       }
 
       if (!this.featuredPlaylists.length && !this.genreTracks.length) {
-        this.showError(`No content found for "${categoryId}".`);
+        this.showError('No content found for "${categoryId}".');
       }
     } catch (error) {
       console.error('Error loading category content:', error);
@@ -377,148 +341,139 @@ export class HomePage implements OnInit {
     }
   }
 
-  /** Toggle like status for a track */
-  async toggleLike(track: Track) {
-    try {
-      await this.audioService.toggleLike(track);
-    } catch (error) {
-      console.error('Error toggling like status:', error);
-      this.showError('Failed to update like status');
+  // ───── SEARCH ─────
+
+  toggleSearch() {
+    this.searchActive = !this.searchActive;
+    if (this.searchActive) {
+      setTimeout(() => this.searchInput.nativeElement.focus(), 200);
+    } else {
+      this.searchQuery = '';
+      this.searchResults = [];
+    }
+  }
+  clearSearch() {
+    this.searchQuery = '';
+    this.searchResults = [];
+  }
+  onSearchFocus() { /* Search focus handler */ }
+  onSearchBlur() { /* Search blur handler */ }
+  onSearch() {
+    const q = this.searchQuery.trim().toLowerCase();
+    if (!q) {
+      this.searchResults = [];
+      return;
+    }
+    // first local
+    const local = this.localMusic.filter(t =>
+      t.title.toLowerCase().includes(q) ||
+      t.artist.toLowerCase().includes(q)
+    );
+    if (local.length) {
+      this.searchResults = local;
+    } else {
+      this.musicService.searchTracks(q, 20)
+        .pipe(
+          map(r => r.tracks.items.map((i: any) => this.mapSpotifyTrack(i))),
+          catchError(() => of<Track[]>([]))
+        )
+        .subscribe(res => (this.searchResults = res));
     }
   }
 
-  /** Initial data load: auth, genres, releases, playlists */
-  private async loadInitialData() {
-    const loading = await this.loadingCtrl.create({
-      message: 'Loading music...',
-    });
-    await loading.present();
-    this.isLoading = true;
-    try {
-      // Initialize storage service
-      await this.storageService.ensureInit();
+  // ───── HELPERS & MAPPERS ─────
 
-      // Load local tracks first
-      await this.refreshLocalMusic();
-
-      // Load streaming content
-      try {
-        const authOk = await firstValueFrom(
-          this.musicService.authenticate()
-        );
-
-        if (authOk) {
-          const [cats, newRel, playlists] = await Promise.all([
-            firstValueFrom(this.musicService.getGenres()),
-            firstValueFrom(this.musicService.getNewReleases()),
-            firstValueFrom(
-              this.musicService.getPlaylistsByGenre(this.selectedCategory)
-            ),
-          ]);
-
-          this.categories = cats.categories.items.map((i: any) => ({
-            id: i.id,
-            name: i.name,
-            icons: i.icons,
-            href: i.href,
-          }));
-
-          // Log the retrieved categories
-          console.log('Categories loaded:', this.categories);
-
-          // Combine streaming new releases with local tracks
-          const spotifyReleases = newRel.albums.items.map((i: any) =>
-            this.mapSpotifyAlbumToTrack(i)
-          );
-
-          // Put local tracks at the beginning of new releases
-          this.newReleases = [
-            ...this.localMusic,
-            ...spotifyReleases
-          ];
-
-          this.featuredPlaylists = playlists;
-          console.log('Featured playlists loaded:', this.featuredPlaylists);
-
-          // Include local tracks in recommendations
-          const spotifyRecommendations = newRel.albums.items
-            .map((i: any) => this.mapSpotifyAlbumToTrack(i));
-
-          this.recommendedTracks = [
-            ...this.localMusic,
-            ...spotifyRecommendations
-          ];
-        } else {
-          // If Spotify auth fails, just use local tracks
-          this.newReleases = [...this.localMusic];
-          this.recommendedTracks = [...this.localMusic];
-          console.warn('Spotify authentication failed, using only local tracks');
-        }
-      } catch (err) {
-        console.error('Spotify API error:', err);
-        // Fall back to local tracks only
-        this.newReleases = [...this.localMusic];
-        this.recommendedTracks = [...this.localMusic];
-      }
-    } catch (err) {
-      console.error('Data load error', err);
-      await this.showError('Failed loading initial data.');
-    } finally {
-      this.isLoading = false;
-      loading.dismiss();
-    }
-  }
-
-  /** Convert raw Spotify track to our Track model */
-  private mapSpotifyTrack(item: any): Track {
-    if (!item) return null as any;
-
+  private mapSpotifyTrack(i: any): Track {
     return {
-      id: item.id || `track-${Date.now()}`,
-      title: item.name,
-      artist: Array.isArray(item.artists)
-        ? item.artists.map((a: any) => a.name).join(', ')
-        : 'Unknown Artist',
-      album: item.album?.name || 'Unknown Album',
-      duration: (item.duration_ms ?? item.duration) / 1000,
-      imageUrl:
-        item.images?.[0]?.url ||
-        item.album?.images?.[0]?.url ||
-        'assets/default-album-art.png',
-      previewUrl: item.preview_url || '',
-      spotifyId: item.id || '',
+      id: i.id,
+      title: i.name,
+      artist: i.artists.map((a: any) => a.name).join(', '),
+      album: i.album.name,
+      duration: i.duration_ms / 1000,
+      imageUrl: i.album.images[0]?.url,
+      previewUrl: i.preview_url,
+      spotifyId: i.id,
       liked: false,
       isLocal: false
     };
   }
 
-  /** Convert Spotify album to track (for new releases) */
-  private mapSpotifyAlbumToTrack(item: any): Track {
-    if (!item) return null as any;
-
+  private mapSpotifyAlbumToTrack(a: any): Track {
     return {
-      id: item.id || `album-${Date.now()}`,
-      title: item.name,
-      artist: Array.isArray(item.artists)
-        ? item.artists.map((a: any) => a.name).join(', ')
-        : 'Unknown Artist',
-      album: item.name || 'Unknown Album',
-      duration: 0, // Albums don't have a duration
-      imageUrl: item.images?.[0]?.url || 'assets/default-album-art.png',
-      previewUrl: '', // Albums don't have preview URLs directly
-      spotifyId: item.id || '',
+      id: a.id,
+      title: a.name,
+      artist: a.artists.map((x: any) => x.name).join(', '),
+      album: a.name,
+      duration: 0,
+      imageUrl: a.images[0]?.url,
+      previewUrl: '',
+      spotifyId: a.id,
       liked: false,
       isLocal: false
     };
   }
 
-  /** Display a simple alert */
-  private async showError(message: string) {
-    const alert = await this.alertController.create({
-      header: 'Notice',
-      message,
-      buttons: ['OK'],
+  private async showError(msg: string) {
+    const alert = await this.alertCtrl.create({
+      header: 'Error',
+      message: msg,
+      buttons: ['OK']
     });
     await alert.present();
+  }
+
+  async doRefresh(event: any) {
+    console.log('Begin refresh operation');
+
+    try {
+      // Refresh local music
+      await this.refreshLocalMusic();
+
+      // Attempt to refresh online content separately
+      try {
+        const authOk = await firstValueFrom(this.musicService.authenticate());
+
+        if (authOk) {
+          // Load new releases and playlists
+          const [newRel, playlists] = await Promise.all([
+            firstValueFrom(this.musicService.getNewReleases()),
+            firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
+          ]);
+
+          // Update streaming content WITHOUT including local music
+          this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+          this.featuredPlaylists = playlists;
+          this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+        }
+      } catch (streamingError) {
+        console.error('Error refreshing streaming content:', streamingError);
+        // Keep existing streaming content, don't reset to empty arrays
+      }
+
+      // Show a success toast
+      const toast = await this.toastCtrl.create({
+        message: 'Music library refreshed!',
+        duration: 2000,
+        position: 'bottom',
+        color: 'success'
+      });
+      toast.present();
+
+      console.log('Refresh completed successfully');
+    } catch (error) {
+      console.error('Error during refresh:', error);
+
+      // Show error toast
+      const toast = await this.toastCtrl.create({
+        message: 'Could not refresh content. Please try again.',
+        duration: 2000,
+        position: 'bottom',
+        color: 'danger'
+      });
+      toast.present();
+    } finally {
+      // Always complete the refresher
+      event.target.complete();
+    }
   }
 }

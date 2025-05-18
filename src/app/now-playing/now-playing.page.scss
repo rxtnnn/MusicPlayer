@@ -40,6 +40,47 @@
   }
 }
 
+// CSS Styles for the Action Sheet
+
+// Add these styles to your now-playing.page.scss file:
+
+// Style the menu button
+.menu-button {
+  background: transparent;
+  border: none;
+  padding: 8px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+
+  &:active {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+// Optional: Add these styles if you want to customize the action sheet
+::ng-deep .action-sheet-destructive {
+  color: var(--ion-color-danger) !important;
+}
+
+::ng-deep .action-sheet-icon {
+  color: var(--ion-color-primary);
+}
+
+// Optional: Add some hover effects to the action buttons
+.action-buttons button {
+  transition: transform 0.2s;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
 // Album Art
 .album-container {
   position: relative;

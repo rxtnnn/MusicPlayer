@@ -13,6 +13,8 @@
 ion-content {
   --background: var(--ion-color-dark);
   background-color: var(--ion-color-dark);
+  --padding-start: var(--page-padding);
+  --padding-end: var(--page-padding);
 }
 
 ion-list {
@@ -24,6 +26,7 @@ ion-toolbar{
   font-weight: 800;
   letter-spacing: -0.5px;
   padding-left: 16px;
+  padding-top: 10px;
 }
 
 ion-list-header {

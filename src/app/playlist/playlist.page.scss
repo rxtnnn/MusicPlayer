@@ -2,13 +2,18 @@
 
 :host {
   background-color: var(--ion-color-dark);
+   --page-padding: 16px;
 }
-
+ion-content{
+  --padding-start: var(--page-padding);
+  --padding-end: var(--page-padding);
+}
 ion-toolbar{
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.5px;
   padding-left: 16px;
+  padding-top: 10px;
 }
 .play-container {
   background-color: var(--ion-color-dark);

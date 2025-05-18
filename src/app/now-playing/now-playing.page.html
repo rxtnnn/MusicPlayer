@@ -8,7 +8,7 @@
       <div class="header-title">
         <h2>Now Playing</h2>
       </div>
-      <button class="menu-button">
+      <button class="menu-button" (click)="showActionMenu($event)">
         <fa-icon [icon]="['fas', 'ellipsis-h']" size="lg"></fa-icon>
       </button>
     </div>
@@ -17,7 +17,7 @@
     <div class="album-container">
       <div class="album-shadow"></div>
       <div class="album-art-wrapper">
-        <img [src]="currentTrack?.imageUrl || 'assets/placeholder.png'"
+        <img [src]="currentTrack?.imageUrl || 'assets/music-bg.png'"
              [alt]="currentTrack?.title"
              class="album-art">
       </div>
@@ -83,4 +83,10 @@
       </button>
     </div>
   </div>
+  <ion-action-sheet
+    #actionSheet
+    [isOpen]="showActions"
+    [buttons]="actionButtons"
+    (didDismiss)="showActions = false">
+  </ion-action-sheet>
 </ion-content>

@@ -165,7 +165,6 @@ export class MusicService {
       );
     }
 
-    // for specific categories, drop the country param
     const url = `${endpoint}/browse/categories/${categoryId}/playlists`;
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
@@ -180,9 +179,6 @@ export class MusicService {
     );
   }
 
-  /**
-   * Get tracks from a specific playlist
-   */
   getPlaylistTracks(playlistId: string): Observable<any> {
     console.log(`Fetching tracks for playlist: ${playlistId}`);
 
@@ -194,7 +190,6 @@ export class MusicService {
       ),
       tap(data => console.log('Playlist tracks received:', data)),
       map((response: any) => {
-        // Don't filter out tracks without preview URLs here
         return response.items;
       }),
       catchError((error) => {
@@ -204,41 +199,27 @@ export class MusicService {
     );
   }
 
-  /**
-   * Get tracks by genre - NEW METHOD
-   */
   getTracksByGenre(genreId: string, limit: number = 50): Observable<Track[]> {
-    console.log(`Fetching tracks for genre: ${genreId}`);
-
-    // First get playlists for the genre
     return this.getPlaylistsByGenre(genreId).pipe(
       switchMap(playlists => {
         if (playlists.length === 0) {
           return of([]);
         }
-
-        // Select a few playlists to get tracks from
         const selectedPlaylists = playlists.slice(0, 3);
-
-        // Create an array of observables, each getting tracks from a playlist
         const playlistObservables = selectedPlaylists.map(playlist =>
           this.getPlaylistTracks(playlist.id)
         );
 
-        // Combine all playlist tracks into one array
         return from(Promise.all(playlistObservables.map(obs =>
           obs.toPromise()
         ))).pipe(
           map(playlistTracksArrays => {
-            // Flatten the array of arrays
             const allTracks = playlistTracksArrays
               .reduce((acc, current) => acc.concat(current), []);
-
-            // Map Spotify tracks to our Track model
             return allTracks
               .filter((item: { track: { preview_url: any; }; }) => item.track && item.track.preview_url) // Only tracks with preview URLs
               .map((item: { track: any; }) => this.mapSpotifyTrackToModel(item.track))
-              .slice(0, limit); // Limit the number of tracks
+              .slice(0, limit);
           })
         );
       }),
@@ -249,9 +230,6 @@ export class MusicService {
     );
   }
 
-  /**
-   * Search tracks by a query string
-   */
   searchTracks(query: string, limit: number = 20): Observable<any> {
     const params = new HttpParams()
       .set('q', query)

@@ -1,10 +1,9 @@
-// src/app/now-playing/now-playing.page.ts
-
-import { Component, OnInit, OnDestroy, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, NgZone, ViewChild } from '@angular/core';
 import { Location } from '@angular/common';
 import { Subscription } from 'rxjs';
 import { AudioService, Track } from '../services/audio.service';
 import { SettingsService } from '../services/settings.service';
+import { StorageService } from '../services/storage.service';
 import { AlertController, ToastController } from '@ionic/angular';
 
 @Component({
@@ -23,10 +22,14 @@ export class NowPlayingPage implements OnInit, OnDestroy {
 
   private subs: Subscription[] = [];
   private settingsSub?: Subscription;
+  showActions = false;
+  actionButtons: any[] = [];
+  @ViewChild('actionSheet') actionSheet: any;
 
   constructor(
     public audioService: AudioService,
     private settingsService: SettingsService,
+    private storageService : StorageService,
     private location: Location,
     private alertCtrl: AlertController,
     private toast: ToastController,
@@ -43,45 +46,47 @@ export class NowPlayingPage implements OnInit, OnDestroy {
       );
     });
 
-    // 2) Subscribe to AudioService observables
-    this.subs.push(
-      this.audioService.getCurrentTrack().subscribe(track => {
+   this.subs.push(
+    this.audioService.getCurrentTrack().subscribe(track => {
+      console.log('Now playing subscription updated with track:', track);
+      if (track !== this.currentTrack) {
         this.zone.run(() => {
           this.currentTrack = track;
-
-          // Check if this is a local track
-          this.isLocalTrack = !!track?.isLocal;
-
-          // Debug log
-          if (track) {
-            console.log('Now playing track:', track.title);
-            console.log('Is local:', track.isLocal);
-            console.log('Path:', track.localPath || track.previewUrl);
-          }
         });
-      }),
+      }
+    })
+  );
 
-      this.audioService.getIsPlaying().subscribe(is => {
+  this.subs.push(
+    this.audioService.getIsPlaying().subscribe(playing => {
+      console.log('Playing state updated:', playing);
+      if (playing !== this.isPlaying) {
         this.zone.run(() => {
-          this.isPlaying = is;
+          this.isPlaying = playing;
         });
-      }),
+      }
+    })
+  );
 
-      this.audioService.getCurrentTime().subscribe(time => {
-        this.zone.run(() => {
-          this.currentTime = time;
-        });
-      }),
+  this.subs.push(
+    this.audioService.getCurrentTime().subscribe(time => {
+      this.zone.run(() => {
+        this.currentTime = time;
+      });
+    })
+  );
+   this.subs.push(
+    this.audioService.getDuration().subscribe(duration => {
+      this.zone.run(() => {
+        this.duration = duration;
+      });
+    })
+  );
 
-      this.audioService.getDuration().subscribe(dur => {
-        this.zone.run(() => {
-          this.duration = dur;
-        });
-      })
-    );
+
 
     // 3) If we get to this page with no track playing, try to load the last track
-    setTimeout(() => {
+  setTimeout(() => {
       if (!this.currentTrack && !this.isPlaying) {
         this.checkAndPlayCurrentTrack();
       }
@@ -118,31 +123,11 @@ export class NowPlayingPage implements OnInit, OnDestroy {
     this.location.back();
   }
 
-  // Play/pause toggle
-  togglePlay() {
-    if (!this.currentTrack) {
-      this.showAlert('No Track', 'Please select a track first.');
-      return;
-    }
-
-    // For local tracks, make sure we have a proper path
-    if (this.isLocalTrack &&
-        !this.currentTrack?.localPath &&
-        !this.currentTrack?.previewUrl) {
-      this.showAlert('Playback Error', 'Local file path is missing. Please try uploading the file again.');
-      return;
-    }
-
-    // For streaming tracks, ensure we have a preview URL
-    if (!this.isLocalTrack && !this.currentTrack?.previewUrl) {
-      this.showAlert('Playback Error', 'This track doesn\'t have a preview available.');
-      return;
-    }
-
-    this.audioService.togglePlay();
+  async togglePlay() {
+    if (!this.currentTrack) return;
+    await this.audioService.togglePlay();
   }
-
-  // Seek handler
+  // Play/Pause
   seek(event: any) {
     const t = event.detail.value as number;
     this.audioService.seek(t);
@@ -156,15 +141,17 @@ export class NowPlayingPage implements OnInit, OnDestroy {
     this.audioService.next();
   }
 
-  // Format seconds → M:SS
-  formatTime(sec: number): string {
-    if (isNaN(sec) || sec === undefined) return '0:00';
+  formatTime(seconds: number): string {
+    if (isNaN(seconds) || seconds === undefined || seconds < 0) {
+      return '0:00';
+    }
 
-    const m = Math.floor(sec / 60);
-    const s = Math.floor(sec % 60)
-      .toString()
-      .padStart(2, '0');
-    return `${m}:${s}`;
+    // Calculate minutes and seconds
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+
+    // Format with leading zeros
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
   // Like/unlike using AudioService
@@ -196,5 +183,110 @@ export class NowPlayingPage implements OnInit, OnDestroy {
       buttons: ['OK']
     });
     await a.present();
+  }
+
+  showActionMenu(event: Event) {
+    // Prevent event propagation
+    event.stopPropagation();
+
+    if (!this.currentTrack) {
+      this.showAlert('No Track', 'No track is currently selected.');
+      return;
+    }
+
+    // Define the buttons for the action sheet
+    this.actionButtons = [
+      {
+        text: 'Delete Track',
+        role: 'destructive',
+        icon: 'trash',
+        handler: () => {
+          this.confirmDeleteTrack(this.currentTrack!);
+        }
+      },
+      {
+        text: 'Share',
+        icon: 'share',
+        handler: () => {
+          // Placeholder for share functionality
+          this.showAlert('Share', 'Share functionality is not implemented yet.');
+        }
+      },
+      {
+        text: this.currentTrack?.liked ? 'Remove from Liked' : 'Add to Liked',
+        icon: 'heart',
+        handler: () => {
+          this.toggleLike();
+        }
+      },
+      {
+        text: 'Cancel',
+        role: 'cancel',
+        icon: 'close'
+      }
+    ];
+
+    // Show the action sheet
+    this.showActions = true;
+  }
+
+  async deleteTrack(track: Track) {
+    try {
+      // If it’s playing, stop it
+      if (this.isPlaying) {
+        await this.audioService.pause();
+      }
+
+      if (track.isLocal) {
+        // 1) Clear the current track so the mini-player (in Home) will close
+        await this.audioService.clearCurrentTrack();
+
+        // 2) Delete it from storage
+        await this.storageService.deleteLocalTrack(track.id);
+
+        // 3) Show confirmation toast
+        const toast = await this.toast.create({
+          message: `"${track.title}" has been deleted`,
+          duration: 2000,
+          position: 'bottom',
+          color: 'success'
+        });
+        await toast.present();
+
+        // 4) Go back to Home (mini-player is now hidden)
+        this.goBack();
+      } else {
+        this.showAlert(
+          'Cannot Delete',
+          'Only local tracks can be deleted. Streaming tracks are managed externally.'
+        );
+      }
+    } catch (error) {
+      console.error('Error deleting track:', error);
+    }
+  }
+
+
+  // Add this method to confirm deletion
+  async confirmDeleteTrack(track: Track) {
+    const alert = await this.alertCtrl.create({
+      header: 'Delete Track',
+      message: `Are you sure you want to delete "${track.title}"?`,
+      buttons: [
+        {
+          text: 'Cancel',
+          role: 'cancel'
+        },
+        {
+          text: 'Delete',
+          role: 'destructive',
+          handler: () => {
+            this.deleteTrack(track);
+          }
+        }
+      ]
+    });
+
+    await alert.present();
   }
 }

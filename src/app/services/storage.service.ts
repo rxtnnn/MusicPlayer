@@ -1,4 +1,3 @@
-// Enhanced StorageService
 import { Injectable } from '@angular/core';
 import { Platform } from '@ionic/angular';
 import {
@@ -68,7 +67,13 @@ export class StorageService {
           key TEXT PRIMARY KEY,
           value TEXT
         );
-      `;
+        CREATE TABLE IF NOT EXISTS downloaded_music (
+          track_id     TEXT PRIMARY KEY,
+          file_uri     TEXT NOT NULL,
+          file_path    TEXT NOT NULL,
+          downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );`;
+
       await this.db.execute(sql);
     })();
     return this._initPromise;
@@ -153,21 +158,25 @@ export class StorageService {
 
   async getLocalTracks(): Promise<Track[]> {
     await this.ensureInit();
+
+    // Join with downloaded_music to get file_path as well
     const res = await this.db.query(`
       SELECT
-        id,
-        title,
-        artist,
-        album,
-        duration,
-        image_url    AS imageUrl,
-        preview_url  AS previewUrl,
-        spotify_id   AS spotifyId,
-        liked,
-        is_local     AS isLocal
-      FROM tracks
-      WHERE is_local = 1
-      ORDER BY ROWID DESC;
+        t.id,
+        t.title,
+        t.artist,
+        t.album,
+        t.duration,
+        t.image_url    AS imageUrl,
+        t.preview_url  AS previewUrl,
+        t.spotify_id   AS spotifyId,
+        t.liked,
+        t.is_local     AS isLocal,
+        dm.file_path   AS localPath
+      FROM tracks t
+      LEFT JOIN downloaded_music dm ON dm.track_id = t.id
+      WHERE t.is_local = 1
+      ORDER BY t.ROWID DESC;
     `);
 
     return (res.values || []).map((r: any) => ({
@@ -180,7 +189,8 @@ export class StorageService {
       previewUrl:r.previewUrl,
       spotifyId: r.spotifyId,
       liked:     !!r.liked,
-      isLocal:   !!r.isLocal
+      isLocal:   !!r.isLocal,
+      localPath: r.localPath
     }));
   }
   // ---------- Liked Music ----------
@@ -238,63 +248,113 @@ export class StorageService {
     }));
   }
 
-  // ---------- Downloaded Music ----------
+  // ---------- Uploaded Music ----------
 
-  async addDownloaded(trackId: string, uri: string): Promise<boolean> {
+  async uploadedMusic(trackId: string, uri: string, filePath: string = ''): Promise<boolean> {
     await this.ensureInit();
     const now = new Date().toISOString();
+
+    // Store both the URI and the relative file path for better recovery
     await this.db.run(
       `INSERT OR REPLACE INTO downloaded_music
-         (track_id, file_uri, downloaded_at)
-       VALUES (?, ?, ?);`,
-      [trackId, uri, now]
+        (track_id, file_uri, file_path, downloaded_at)
+      VALUES (?, ?, ?, ?);`,
+      [trackId, uri, filePath || uri, now]
     );
     return true;
   }
 
-  async removeDownloaded(trackId: string): Promise<boolean> {
+  async deleteLocalTrack(trackId: string): Promise<boolean> {
     await this.ensureInit();
 
-    // First get the file URI
-    const res = await this.db.query(
-      `SELECT file_uri FROM downloaded_music WHERE track_id = ?;`,
-      [trackId]
-    );
+    try {
+      // First, get the track details to find its file path
+      const track = await this.getTrack(trackId);
 
-    if (res.values && res.values.length > 0) {
-      const fileUri = res.values[0].file_uri;
-
-      // Delete the actual file
-      try {
-        if (fileUri && fileUri.startsWith('file://')) {
-          const filePath = fileUri.replace(/^file:\/\//, '');
-          await Filesystem.deleteFile({
-            path: filePath,
-            directory: Directory.Data
-          });
-        }
-      } catch (err) {
-        console.error('Error deleting file:', err);
-        // Continue despite file deletion error
+      if (!track) {
+        console.error('Track not found:', trackId);
+        return false;
       }
+
+      // Check if it's a local track
+      if (!track.isLocal) {
+        console.error('Cannot delete non-local track:', trackId);
+        return false;
+      }
+
+      // Delete the file from filesystem if it's local
+      if (track.previewUrl) {
+        try {
+          // If it's a blob URL (web platform)
+          if (track.previewUrl.startsWith('blob:')) {
+            // Blob URLs can't be deleted directly from filesystem,
+            // they are automatically cleaned up when no longer referenced
+            console.log('Blob URL will be garbage collected:', track.previewUrl);
+          }
+          // If it's a file:// URL (native platform)
+          else if (track.previewUrl.startsWith('file://')) {
+            const path = track.previewUrl.replace(/^file:\/\//, '');
+            await Filesystem.deleteFile({
+              path,
+              directory: Directory.Data
+            });
+            console.log('Deleted file:', path);
+          }
+        } catch (fileError) {
+          console.warn('Error deleting file:', fileError);
+          // Continue with deletion even if file deletion fails
+        }
+      }
+
+      // Delete from tracks table
+      await this.db.run(
+        'DELETE FROM tracks WHERE id = ?',
+        [trackId]
+      );
+
+      // Delete from liked_music if present
+      await this.db.run(
+        'DELETE FROM liked_music WHERE track_id = ?',
+        [trackId]
+      );
+
+      // Delete from downloaded_music if present
+      await this.db.run(
+        'DELETE FROM downloaded_music WHERE track_id = ?',
+        [trackId]
+      );
+
+      // Delete from playlist_tracks if present
+      await this.db.run(
+        'DELETE FROM playlist_tracks WHERE track_id = ?',
+        [trackId]
+      );
+
+      console.log('Successfully deleted track:', trackId);
+      return true;
+    } catch (error) {
+      console.error('Error deleting local track:', error);
+      throw error;
     }
-
-    // Remove from database
-    await this.db.run(
-      `DELETE FROM downloaded_music WHERE track_id = ?;`,
-      [trackId]
-    );
-
-    return true;
   }
 
-  async getDownloadedTracks(): Promise<{track_id:string;file_uri:string}[]> {
-    await this.ensureInit();
-    const res = await this.db.query(
-      `SELECT track_id, file_uri FROM downloaded_music;`
-    );
-    return res.values || [];
+  async getTrackFilePath(trackId: string): Promise<{uri: string, path: string} | null> {
+  await this.ensureInit();
+  const res = await this.db.query(
+    `SELECT file_uri, file_path FROM downloaded_music WHERE track_id = ?;`,
+    [trackId]
+  );
+
+  if (res.values?.length) {
+    return {
+      uri: res.values[0].file_uri,
+      path: res.values[0].file_path
+    };
   }
+  return null;
+}
+
+
 
   // ---------- Track Table Management ----------
 
@@ -344,6 +404,17 @@ export class StorageService {
 
     return null;
   }
+  async queryTracks(query: string, params: any[] = []): Promise<any[]> {
+    await this.ensureInit();
+
+    try {
+      const result = await this.db.query(query, params);
+      return result.values || [];
+    } catch (error) {
+      console.error('Error executing track query:', error);
+      throw error;
+    }
+  }
 
   // ---------- Execute Raw SQL ----------
   async executeSql(sql: string, params: any[] = []): Promise<any> {
@@ -392,10 +463,7 @@ export class StorageService {
     }
   }
 
-  /**
-   * Save a local music file
-   */
-  async saveLocalMusic(track: Track): Promise<boolean> {
+   async saveLocalMusic(track: Track, filePath: string = ''): Promise<boolean> {
     await this.ensureInit();
 
     // Ensure the track is marked as local
@@ -407,12 +475,15 @@ export class StorageService {
     // Save the track data with the local flag
     await this.saveTrack(trackWithLocal);
 
-    // Add it to the downloaded music table
-    await this.addDownloaded(track.id, track.previewUrl);
+    // Add it to the downloaded music table with both URI and path
+    await this.uploadedMusic(
+      track.id,
+      track.previewUrl,
+      filePath || `music/${track.id}.mp3` // Store a default relative path
+    );
 
     return true;
   }
-
   /**
    * Get all downloaded tracks with full track info
    */
@@ -442,10 +513,6 @@ export class StorageService {
       isLocal: !!r.isLocal
     }));
   }
-
-  /**
-   * Check if a file exists in the app's data directory
-   */
   async fileExists(path: string): Promise<boolean> {
     try {
       await Filesystem.stat({
@@ -454,6 +521,72 @@ export class StorageService {
       });
       return true;
     } catch (error) {
+      return false;
+    }
+  }
+
+  async verifyLocalTrack(trackId: string): Promise<boolean> {
+    try {
+      // Get track details
+      const track = await this.getTrack(trackId);
+      if (!track || !track.isLocal) return false;
+
+      // Get file path info
+      const fileInfo = await this.getTrackFilePath(trackId);
+      if (!fileInfo) return false;
+
+      // Try primary URI first
+      let exists = false;
+
+      if (fileInfo.uri.startsWith('blob:')) {
+        // For blob URLs, we can't really verify if they're still valid
+        // Just assume they are for the current session
+        return true;
+      }
+
+      try {
+        // For file:// URIs
+        if (fileInfo.uri.startsWith('file://')) {
+          const path = fileInfo.uri.replace(/^file:\/\//, '');
+          await Filesystem.stat({
+            path,
+            directory: Directory.Data
+          });
+          exists = true;
+        }
+        // For relative paths
+        else {
+          await Filesystem.stat({
+            path: fileInfo.path,
+            directory: Directory.Data
+          });
+          exists = true;
+        }
+      } catch (e) {
+        // File not found at primary location, try backup path
+        try {
+          await Filesystem.stat({
+            path: fileInfo.path,
+            directory: Directory.Data
+          });
+
+          // If we get here, the file exists at the backup path
+          // Update the primary URI
+          await this.db.run(
+            `UPDATE downloaded_music SET file_uri = ? WHERE track_id = ?`,
+            [fileInfo.path, trackId]
+          );
+
+          exists = true;
+        } catch (backupError) {
+          // File not found at backup location either
+          exists = false;
+        }
+      }
+
+      return exists;
+    } catch (error) {
+      console.error('Error verifying track:', error);
       return false;
     }
   }

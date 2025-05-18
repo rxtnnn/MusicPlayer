@@ -23,10 +23,6 @@ const routes: Routes = [
     path: 'now-playing',
     loadChildren: () => import('./now-playing/now-playing.module').then( m => m.NowPlayingPageModule)
   },
-  {
-    path: 'get-started',
-    loadChildren: () => import('./get-started/get-started.module').then( m => m.GetStartedPageModule)
-  },
 ];
 
 @NgModule({

@@ -38,6 +38,14 @@
 </ion-header>
 
 <ion-content class="home-container">
+  <ion-refresher slot="fixed" (ionRefresh)="doRefresh($event)">
+    <ion-refresher-content
+      pullingIcon="chevron-down-circle-outline"
+      pullingText="Pull to refresh"
+      refreshingSpinner="circles"
+      refreshingText="Refreshing...">
+    </ion-refresher-content>
+  </ion-refresher>
   <!-- Search Results Container -->
   <div class="search-results-container" *ngIf="searchActive && searchQuery" [class.has-results]="searchResults.length > 0">
     <div class="search-results-content">
@@ -108,32 +116,29 @@
           </div>
           <div class="upload-button-wrapper">
             <ion-button fill="solid" shape="round" size="small">
-              <ion-icon name="add" slot="icon-only"></ion-icon>
+              <ion-icon name="add" slot="icon-only" (click)="fileInput.click()"></ion-icon>
             </ion-button>
-            <input
-              #fileInput
-              type="file"
-              accept="audio/*"
-              (change)="onFileSelected($event)"
-            />
+             <input
+                #fileInput
+                type="file"
+                accept="audio/*"
+                multiple
+                (change)="onFileSelected($event)"
+              />
           </div>
         </div>
       </div>
     </div>
     <!-- Local Music -->
-    <div class="section-header">
+     <div class="section-header">
       <h2>Local Music</h2>
     </div>
-    <div class="horizontal-scroll-container" *ngIf="hasLocalMusic">
-      <div
-        *ngFor="let track of localMusic"
-        class="music-card"
-        (click)="playTrack(track)"
-      >
+    <div class="horizontal-scroll-container" *ngIf="localMusic.length > 0">
+      <div *ngFor="let t of localMusic" (click)="playTrack(t)" class="music-card">
         <div class="album-art-container">
           <img
-            [src]="track.imageUrl || 'assets/default-album-art.png'"
-            [alt]="track.title"
+            [src]="t.imageUrl || 'assets/music-bg.png'"
+            [alt]="t.title"
             class="album-art"
           />
           <div class="play-overlay">
@@ -141,8 +146,8 @@
           </div>
         </div>
         <div class="track-info">
-          <h3 class="track-title">{{ track.title }}</h3>
-          <p class="track-artist">{{ track.artist }}</p>
+          <h3 class="track-title">{{ t.title }}</h3>
+          <p class="track-artist">{{ t.artist }}</p>
         </div>
       </div>
     </div>
@@ -186,7 +191,7 @@
       >
         <div class="album-art-container">
           <img
-            [src]="playlist.images[0]?.url || 'assets/placeholder.png'"
+            [src]="playlist.images[0]?.url || 'assets/music-bg.png'"
             [alt]="playlist.name"
             class="album-art"
           />

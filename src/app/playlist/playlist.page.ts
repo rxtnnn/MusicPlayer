@@ -75,14 +75,8 @@ export class PlaylistsPage implements OnInit, OnDestroy {
       }
     }
   }
-  private async loadLocalTracks() {
-    try {
-      this.downloadedTracks = await this.storage.getLocalTracks();
-    } catch (error) {
-      console.error('Error loading local tracks:', error);
-      this.downloadedTracks = [];
-      await this.showAlert('Error', 'Failed to load local music.');
-    }
+  async loadLocalTracks() {
+    this.downloadedTracks = await this.storage.getLocalTracks();
   }
 
   private async loadLikedTracks() {
@@ -95,14 +89,11 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     }
   }
 
-  selectDownloadedMusic() {
-    this.selectedPlaylist = {
-      id: -2, // Use -2 to differentiate from liked music (-1)
-      name: 'Local Music',
-      created_at: ''
-    };
-    this.playlistTracks = [...this.downloadedTracks];
+  async selectDownloadedMusic() {
+    this.selectedPlaylist = { id: -2, name: 'Local Music', created_at: '' };
+    this.playlistTracks = await this.storage.getLocalTracks();
   }
+
 
   private async loadPlaylists() {
     try {
