@@ -34,6 +34,7 @@ export class AudioService {
   private timerId: any;
   private _currentBlobUrl: string | null = null;
   private _trackReady = false;
+  private progressSubject = new BehaviorSubject<number>(0);
 
   constructor(
     private storage: StorageService,
@@ -56,73 +57,57 @@ export class AudioService {
 
   private setupAudioEvents() {
     this.audioPlayer.addEventListener('loadedmetadata', () => {
-      console.log('Audio loadedmetadata event, duration:', this.audioPlayer.duration);
       this.duration$.next(this.audioPlayer.duration);
       this._trackReady = true;
     });
 
-    this.audioPlayer.addEventListener('timeupdate', () => {
-      this.currentTime$.next(this.audioPlayer.currentTime);
-    });
-
     this.audioPlayer.addEventListener('play', () => {
-      console.log('Audio play event fired');
       this.isPlaying$.next(true);
       this.startUpdates();
     });
 
     this.audioPlayer.addEventListener('pause', () => {
-      console.log('Audio pause event fired');
       this.isPlaying$.next(false);
       this.stopUpdates();
     });
 
     this.audioPlayer.addEventListener('ended', () => {
-      console.log('Audio ended event fired');
       this.next();
     });
 
     this.audioPlayer.addEventListener('error', (e: any) => {
-      const error = this.audioPlayer.error;
-      console.error('Audio playback error:', e);
-      console.error('Error code:', error ? error.code : 'unknown');
-      console.error('Error message:', error ? error.message : 'unknown');
       this.isPlaying$.next(false);
     });
 
     this.localAudioPlayer.addEventListener('loadedmetadata', () => {
-      console.log('Local audio loadedmetadata event, duration:', this.localAudioPlayer.duration);
       this.duration$.next(this.localAudioPlayer.duration);
       this._trackReady = true;
     });
 
-    this.localAudioPlayer.addEventListener('timeupdate', () => {
-      this.currentTime$.next(this.localAudioPlayer.currentTime);
-    });
-
     this.localAudioPlayer.addEventListener('play', () => {
-      console.log('Local audio play event fired');
       this.isPlaying$.next(true);
       this.startUpdates();
     });
 
     this.localAudioPlayer.addEventListener('pause', () => {
-      console.log('Local audio pause event fired');
       this.isPlaying$.next(false);
       this.stopUpdates();
     });
 
     this.localAudioPlayer.addEventListener('ended', () => {
-      console.log('Local audio ended event fired');
       this.next();
     });
 
     this.localAudioPlayer.addEventListener('error', (e: any) => {
       const error = this.localAudioPlayer.error;
-      console.error('Local audio playback error:', e);
-      console.error('Error code:', error ? error.code : 'unknown');
-      console.error('Error message:', error ? error.message : 'unknown');
       this.isPlaying$.next(false);
+    });
+
+    this.localAudioPlayer.addEventListener('timeupdate', () => {
+      const currentTime = this.localAudioPlayer.currentTime;
+      this.currentTime$.next(currentTime);
+      const progress = (currentTime / this.localAudioPlayer.duration) * 100 || 0;
+      this.progressSubject.next(progress);
     });
   }
 
@@ -202,6 +187,10 @@ export class AudioService {
                 blob = this.base64ToBlob(this.arrayBufferToBase64(arrayBuffer), 'audio/mpeg');
               } else {
                 blob = this.base64ToBlob(fileData.data, 'audio/mpeg');
+              }
+
+              if (this._currentBlobUrl) {
+                URL.revokeObjectURL(this._currentBlobUrl);
               }
               const url = URL.createObjectURL(blob);
               this._currentBlobUrl = url;
@@ -400,7 +389,6 @@ export class AudioService {
   }
 
   seek(time: number): void {
-    console.log(`Seeking to time: ${time}`);
     const activePlayer = this.getCurrentPlayer();
     activePlayer.currentTime = time;
 
@@ -418,14 +406,13 @@ export class AudioService {
     console.log(`Toggled like status for ${track.title}: ${track.liked}`);
   }
 
-  // GETTERS FOR OBSERVABLE DATA
   getCurrentTrack(): Observable<Track|null> { return this.currentTrack$.asObservable(); }
   getIsPlaying(): Observable<boolean> { return this.isPlaying$.asObservable(); }
   getCurrentTime(): Observable<number> { return this.currentTime$.asObservable(); }
   getDuration(): Observable<number> { return this.duration$.asObservable(); }
   getQueue(): Track[] { return this.queue; }
   getQueueIndex(): number { return this.queueIndex; }
-
+  getProgress(): Observable<number> { return this.progressSubject.asObservable(); }
 
   async addLocalTrack(file: File): Promise<Track> {
     try {
@@ -493,24 +480,16 @@ export class AudioService {
     }
   }
 
-
-
   async getAudioDuration(file: File): Promise<number> {
     return new Promise((resolve) => {
-      // Create a temporary URL for the file
       const url = URL.createObjectURL(file);
-
-      // Create a temporary audio element
       const tempAudio = new Audio();
-
-      // Set a timeout to avoid hanging
       const timeout = setTimeout(() => {
         console.warn('Audio duration detection timeout, defaulting to 0');
         URL.revokeObjectURL(url);
         resolve(0);
       }, 3000);
 
-      // When metadata is loaded, get the duration
       tempAudio.addEventListener('loadedmetadata', () => {
         clearTimeout(timeout);
         const duration = isNaN(tempAudio.duration) ? 0 : tempAudio.duration;
@@ -518,7 +497,6 @@ export class AudioService {
         resolve(duration);
       });
 
-      // Handle errors
       tempAudio.addEventListener('error', () => {
         clearTimeout(timeout);
         console.warn('Error getting audio duration, using default 0');
@@ -526,7 +504,6 @@ export class AudioService {
         resolve(0);
       });
 
-      // Set the source and load the audio
       tempAudio.preload = 'metadata';
       tempAudio.src = url;
     });
@@ -544,13 +521,9 @@ export class AudioService {
     return window.btoa(binary);
   }
 
-  // Track existence check
   async trackExistsByName(fileName: string): Promise<boolean> {
     try {
-      // Extract the title from the filename by removing the extension
       const title = fileName.replace(/\.[^/.]+$/, '');
-
-      // Query storage for tracks with this title that are local
       const existingTracks = await this.storage.queryTracks(
         'SELECT id FROM tracks WHERE title = ? AND is_local = 1',
         [title]
@@ -564,25 +537,16 @@ export class AudioService {
   }
 
   cleanup(): void {
-    // Stop both players
     this.audioPlayer.pause();
     this.localAudioPlayer.pause();
-
-    // Reset positions to beginning
     this.audioPlayer.currentTime = 0;
     this.localAudioPlayer.currentTime = 0;
-
-    // Revoke any existing blob URLs
     if (this._currentBlobUrl) {
       console.log('Cleaning up blob URL');
       URL.revokeObjectURL(this._currentBlobUrl);
       this._currentBlobUrl = null;
     }
-
-    // Always clear any saved position
     this._savedPosition = undefined;
-
-    // Stop time updates
     if (this.timerId) {
       clearInterval(this.timerId);
       this.timerId = null;
@@ -591,33 +555,25 @@ export class AudioService {
 
   public async clearCurrentTrack(): Promise<void> {
     try {
-      // First pause playback if it's playing
       await this.pause();
 
-      // Reset the current track
       this.currentTrack$.next(null);
       this.isPlaying$.next(false);
 
-      // Reset time positions
       this.currentTime$.next(0);
       this.duration$.next(0);
 
-      // Reset audio elements and their positions
       this.audioPlayer.src = '';
       this.audioPlayer.currentTime = 0;
 
       this.localAudioPlayer.src = '';
       this.localAudioPlayer.currentTime = 0;
 
-      // Clear any saved position
       if (this._savedPosition !== undefined) {
         this._savedPosition = undefined;
       }
 
-      // Remove the last played track from storage
       await this.storage.set('last_played_track', null);
-
-      console.log('Track cleared, all positions reset');
     } catch (error) {
       console.error('Error clearing current track:', error);
     }
@@ -625,27 +581,17 @@ export class AudioService {
 
   async pauseAndReset(): Promise<void> {
     try {
-      // Get current player
       const activePlayer = this.getCurrentPlayer();
-
-      // Pause playback
       activePlayer.pause();
       this.isPlaying$.next(false);
-
-      // Reset position to beginning
       activePlayer.currentTime = 0;
       this.currentTime$.next(0);
-
-      // Clear any saved position
       this._savedPosition = undefined;
-
-      // Stop updates
       if (this.timerId) {
         clearInterval(this.timerId);
         this.timerId = null;
       }
     } catch (error) {
-      console.error('Error pausing and resetting playback:', error);
       throw error;
     }
   }

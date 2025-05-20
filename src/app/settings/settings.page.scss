@@ -3,7 +3,9 @@
 :host {
   background-color: var(--ion-color-dark);
 }
-
+.settings{
+  padding: 16px;
+}
 .dark-mode {
   --ion-background-color: var(--ion-color-dark);
   --ion-background-color-rgb: var(--ion-color-dark-rgb);
@@ -33,6 +35,7 @@ ion-list-header {
   --background: var(--ion-color-dark);
   margin-top: 24px;
   margin-bottom: 8px;
+  padding: 0 16px;
 
   ion-label {
     font-weight: 700;
@@ -40,6 +43,7 @@ ion-list-header {
     color: var(--ion-color-secondary);
     text-transform: uppercase;
     letter-spacing: 1px;
+    padding: 10px;
   }
 }
 
@@ -52,10 +56,10 @@ ion-item {
   --inner-padding-end: 0;
   --inner-padding-start: 0;
   margin-bottom: 8px;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
   transition: background-color 0.3s ease;
-
+  padding: 10px;
   &:hover {
     --background: var(--ion-color-dark-shade);
   }
@@ -77,65 +81,14 @@ ion-toggle {
   --background-checked: var(--ion-color-secondary);
   --handle-background: white;
   --handle-background-checked: white;
+  padding: 10px;
 }
 
 ion-select {
   --background: transparent;
-  --color: var(--ion-color-light);
   --padding-top: 10px;
   --padding-bottom: 10px;
-  --placeholder-color: var(--ion-color-light);
   --placeholder-opacity: 0.7;
-}
-
-// Specific item styles
-.sign-out-item {
-  --background: rgba(255, 0, 0, 0.1);
-
-  ion-label {
-    color: var(--ion-color-danger);
-  }
-}
-
-// Buttons and interactions
-.item-button {
-  transition: background-color 0.3s ease;
-
-  &:hover {
-    background-color: var(--ion-color-dark-shade);
-  }
-}
-
-// Storage section
-.storage-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  .storage-info {
-    display: flex;
-    flex-direction: column;
-
-    h2 {
-      font-size: 16px;
-      font-weight: 600;
-      margin: 0 0 4px;
-      color: var(--ion-color-light);
-    }
-
-    p {
-      font-size: 14px;
-      color: rgba(255, 255, 255, 0.6);
-      margin: 0;
-    }
-  }
-}
-
-// Equalizer and other specialized items
-.equalizer-item {
-  ion-note {
-    color: var(--ion-color-secondary);
-  }
 }
 
 // Responsive adjustments

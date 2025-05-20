@@ -122,12 +122,8 @@
         </div>
         <div class="track-item-right">
           <button class="like-button" (click)="toggleTrack(track); $event.stopPropagation()">
-            <fa-icon
-            [icon]="
-              (audio.getCurrentTrack() | async)?.id === track.id &&
-                (audio.getIsPlaying()    | async)
-                  ? ['fas','pause']
-                  : ['fas','play']"></fa-icon>
+            <fa-icon [icon]=" (audio.getCurrentTrack() | async)?.id === track.id &&
+                (audio.getIsPlaying() | async) ? ['fas','pause'] : ['fas','play']"></fa-icon>
           </button>
 
           <button class="more-button" (click)="$event.stopPropagation()">

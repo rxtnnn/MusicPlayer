@@ -30,23 +30,26 @@
     </div>
 
     <!-- Progress Bar -->
-    <div class="progress-container">
-      <ion-range
-        class="progress-bar"
-        [min]="0"
-        [max]="duration"
-        [value]="currentTime"
-        [class.dark-mode]="isDarkMode"
-        (ionInput)="onSeekDrag($event)"
-        (ionChange)="seek($event)"
-        snaps="false"
-        pin="true"
-        >
-      </ion-range>
-      <div class="time-display">
-        <span class="current-time">{{formatTime(currentTime)}}</span>
-        <span class="total-time">{{formatTime(duration)}}</span>
+   <!-- Progress Bar -->
+    <div class="custom-progress-container">
+      <div class="time-label">{{ formatTime(isSeeking ? tempSeekValue : currentTime) }}</div>
+      
+      <div class="custom-progress-bar">
+        <div class="progress-track">
+          <div class="progress-fill" [style.width]="(isSeeking ? (tempSeekValue / (duration || 1)) : (currentTime / (duration || 1))) * 100 + '%'"></div>
+        </div>
+        <ion-range 
+          class="progress-slider"
+          min="0"
+          [max]="duration || 1"
+          [value]="isSeeking ? tempSeekValue : currentTime"
+          (ionKnobMoveStart)="onSeekStart()"
+          (ionChange)="onSeekChange($event)"
+          (ionKnobMoveEnd)="onSeekEnd()" 
+          color="primary">
+        </ion-range>
       </div>
+      <div class="time-label">{{ formatTime(duration) }}</div>
     </div>
 
     <!-- Controls -->

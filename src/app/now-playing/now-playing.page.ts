@@ -19,12 +19,16 @@ export class NowPlayingPage implements OnInit, OnDestroy {
   duration = 0;
   isDarkMode?: boolean;
   isLocalTrack = false;
+  progress = 0;
+  isSeeking = false;
+  tempSeekValue = 0;
 
   private subs: Subscription[] = [];
   private settingsSub?: Subscription;
   showActions = false;
   actionButtons: any[] = [];
   @ViewChild('actionSheet') actionSheet: any;
+
 
   constructor(
     public audioService: AudioService,
@@ -37,7 +41,6 @@ export class NowPlayingPage implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    // 1) Theme toggling
     this.settingsSub = this.settingsService.settings$.subscribe(settings => {
       this.isDarkMode = settings.darkMode;
       document.body.setAttribute(
@@ -48,7 +51,6 @@ export class NowPlayingPage implements OnInit, OnDestroy {
 
    this.subs.push(
     this.audioService.getCurrentTrack().subscribe(track => {
-      console.log('Now playing subscription updated with track:', track);
       if (track !== this.currentTrack) {
         this.zone.run(() => {
           this.currentTrack = track;
@@ -59,7 +61,6 @@ export class NowPlayingPage implements OnInit, OnDestroy {
 
   this.subs.push(
     this.audioService.getIsPlaying().subscribe(playing => {
-      console.log('Playing state updated:', playing);
       if (playing !== this.isPlaying) {
         this.zone.run(() => {
           this.isPlaying = playing;
@@ -82,6 +83,13 @@ export class NowPlayingPage implements OnInit, OnDestroy {
       });
     })
   );
+  this.subs.push(
+  this.audioService.getProgress().subscribe(progress => {
+    this.zone.run(() => {
+      this.progress = progress;
+    });
+  })
+);
 
   setTimeout(() => {
       if (!this.currentTrack && !this.isPlaying) {
@@ -128,19 +136,23 @@ export class NowPlayingPage implements OnInit, OnDestroy {
     }
   }
 
-  seek(event: any) {
-    try {
-      const newValue = event.detail.value;
-      this.currentTime = newValue;
-      this.audioService.seek(newValue);
-    } catch (error) {
-      console.error('Error seeking:', error);
-    }
-  }
-  onSeekDrag(event: any) {
-    this.currentTime = event.detail.value;
+  onSeekStart() {
+    this.isSeeking = true;
+    this.tempSeekValue = this.currentTime;
   }
 
+  onSeekChange(event: any) {
+    if (this.isSeeking) {
+      this.tempSeekValue = event.detail.value;
+    }
+  }
+
+  onSeekEnd() {
+    if (this.isSeeking) {
+      this.audioService.seek(this.tempSeekValue);
+      this.isSeeking = false;
+    }
+  }
   previous() {
     this.audioService.previous();
   }
@@ -205,13 +217,6 @@ export class NowPlayingPage implements OnInit, OnDestroy {
         }
       },
       {
-        text: 'Share',
-        icon: 'share',
-        handler: () => {
-          this.showAlert('Share', 'Share functionality is not implemented yet.');
-        }
-      },
-      {
         text: this.currentTrack?.liked ? 'Remove from Liked' : 'Add to Liked',
         icon: 'heart',
         handler: () => {
@@ -273,7 +278,6 @@ export class NowPlayingPage implements OnInit, OnDestroy {
         }
       ]
     });
-
     await alert.present();
   }
 }

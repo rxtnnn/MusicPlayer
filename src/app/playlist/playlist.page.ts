@@ -213,41 +213,6 @@ export class PlaylistsPage implements OnInit, OnDestroy {
     await alert.present();
   }
 
-  async deleteFromPlaylist(track: Track) {
-    if (!this.selectedPlaylist || this.selectedPlaylist.id < 0) return;
-
-    const confirmAlert = await this.alertCtrl.create({
-      header: 'Remove Track',
-      message: `Are you sure you want to remove "${track.title}" from this playlist?`,
-      buttons: [
-        {
-          text: 'Cancel',
-          role: 'cancel'
-        },
-        {
-          text: 'Remove',
-          handler: async () => {
-            try {
-              //remove the playlist in database
-              await this.storage.executeSql(
-                'DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?',
-                [this.selectedPlaylist!.id, track.id]
-              );
-              //refresh the playlist tracks
-              await this.loadPlaylistTracks(this.selectedPlaylist!.id);
-              // Refresh playlists to update track counts
-              await this.loadPlaylists();
-            } catch (error) {
-              console.error('Error removing track from playlist:', error);
-              await this.showAlert('Error', 'Failed to remove track from playlist.');
-            }
-          }
-        }
-      ]
-    });
-    await confirmAlert.present();
-  }
-
   async toggleTrack(track: Track): Promise<void> {
     try {
       this.audio.cleanup();

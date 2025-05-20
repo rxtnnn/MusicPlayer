@@ -20,7 +20,7 @@ import { SettingsService } from '../services/settings.service';
 import { firstValueFrom, of, Subscription } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 import { Capacitor } from '@capacitor/core';
-import { Directory, Filesystem } from '@capacitor/filesystem';
+import { Filesystem } from '@capacitor/filesystem';
 
 @Component({
   selector: 'app-home',
@@ -32,15 +32,17 @@ export class HomePage implements OnInit, OnDestroy {
   @ViewChild('searchInput', { read: ElementRef }) searchInput!: ElementRef;
   @ViewChild('fileInput', { static: false }) fileInput!: ElementRef<HTMLInputElement>;
 
-  // ---- Local music ----
+  // local music
   localMusic: Track[] = [];
   currentLocal?: Track;
   localAudio = new Audio();
   localPlaying = false;
   localDuration = 0;
   localCurrentTime = 0;
-
-  // ---- Search/streaming ----
+  currentTrack: Track | null = null;
+  isPlaying = false;
+  currentTime = 0;
+//search
   searchActive = false;
   searchQuery = '';
   searchResults: Track[] = [];
@@ -73,11 +75,9 @@ export class HomePage implements OnInit, OnDestroy {
     private toastCtrl: ToastController,
     private loadingCtrl: LoadingController,
     private alertCtrl: AlertController,
-    private platform: Platform
   ) {}
 
   async ngOnInit() {
-    // wire up local-audio events
     this.localAudio.addEventListener('loadedmetadata', () => {
       this.localDuration = this.localAudio.duration;
     });
@@ -88,11 +88,11 @@ export class HomePage implements OnInit, OnDestroy {
       this.localPlaying = false;
     });
 
-    // Settings subscription
     this.settingsSub = this.settingsService.settings$.subscribe(s => {
       this.isDarkMode = s.darkMode;
       document.body.setAttribute('color-theme', s.darkMode ? 'dark' : 'light');
     });
+    this.audioService.getIsPlaying().subscribe(p => this.isPlaying = p);
     await this.storageService.ensureInit();
     await this.refreshLocalMusic();
     await this.loadInitialData();
@@ -106,97 +106,6 @@ export class HomePage implements OnInit, OnDestroy {
     this.settingsSub?.unsubscribe();
   }
 
-  private async loadInitialData() {
-    const load = await this.loadingCtrl.create({ message: 'Loading music…' });
-    await load.present();
-    this.isLoading = true;
-
-    try {
-      // Init storage & local music
-      await this.storageService.ensureInit();
-      await this.refreshLocalMusic();
-
-      // Then try to load streaming content
-      const authOk = await firstValueFrom(this.musicService.authenticate());
-
-      if (authOk) {
-        // Load categories, new releases and playlists in parallel
-        const [cats, newRel, playlists] = await Promise.all([
-          firstValueFrom(this.musicService.getGenres()),
-          firstValueFrom(this.musicService.getNewReleases()),
-          firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
-        ]);
-
-        // Set categories from API
-        this.categories = cats.categories.items;
-
-        // FIXED: Don't include local music in new releases
-        this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
-
-        // Set featured playlists
-        this.featuredPlaylists = playlists;
-
-        // FIXED: Don't include local music in recommended tracks
-        this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
-      } else {
-        // If authentication fails, set empty arrays for streaming content
-        this.newReleases = [];
-        this.recommendedTracks = [];
-
-        // Show a toast for the user to know streaming content couldn't be loaded
-        const toast = await this.toastCtrl.create({
-          message: 'Could not load streaming content. Only local music is available.',
-          duration: 3000,
-          position: 'bottom',
-          color: 'warning'
-        });
-        await toast.present();
-      }
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-
-      // Set empty arrays for streaming content on error
-      this.newReleases = [];
-      this.recommendedTracks = [];
-
-      // Show error toast
-      const toast = await this.toastCtrl.create({
-        message: 'Error loading streaming content. Only local music is available.',
-        duration: 3000,
-        position: 'bottom',
-        color: 'danger'
-      });
-      await toast.present();
-    } finally {
-      this.isLoading = false;
-      load.dismiss();
-    }
-  }
-
-  private async refreshLocalMusic() {
-    try {
-      this.localMusic = await this.storageService.getLocalTracks();
-      return this.localMusic;
-    } catch (error) {
-      console.error('Error refreshing local music:', error);
-      throw error;
-    }
-  }
-
-  async requestAudioPermissions() {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      // Request filesystem permissions which include audio access
-      await Filesystem.requestPermissions();
-      return true;
-    } catch (e) {
-      console.error('Error requesting permissions:', e);
-      return false;
-    }
-  }
-  return true; // In web, permissions work differently
-}
-
   openFileSelector() {
     this.fileInput.nativeElement.click();
   }
@@ -206,8 +115,6 @@ export class HomePage implements OnInit, OnDestroy {
     if (!input.files?.length) return;
 
     const files = Array.from(input.files);
-
-    // 1) Gather existing filenames (basename of localPath, or title)
     const existingFileNames = new Set(
       this.localMusic.map(t => {
         const pathOrTitle = t.localPath || t.title;
@@ -215,11 +122,9 @@ export class HomePage implements OnInit, OnDestroy {
       })
     );
 
-    // 2) Split incoming files into new vs. duplicates
     const newFiles = files.filter(f => !existingFileNames.has(f.name.toLowerCase()));
     const dupFiles = files.filter(f => existingFileNames.has(f.name.toLowerCase()));
 
-    // 3) Warn about duplicates
     if (dupFiles.length) {
       const dupToast = await this.toastCtrl.create({
         message: `Skipped ${dupFiles.length} duplicate file(s).`,
@@ -232,10 +137,8 @@ export class HomePage implements OnInit, OnDestroy {
 
     if (!newFiles.length) {
       input.value = '';
-      return;  // nothing to upload
+      return;
     }
-
-    // 4) Proceed with uploading only newFiles…
     const loading = await this.loadingCtrl.create({ message: 'Uploading music…' });
     await loading.present();
 
@@ -266,20 +169,76 @@ export class HomePage implements OnInit, OnDestroy {
     }
   }
 
-  toggleLocalPlay() {
-    if (!this.currentLocal) return;
-    if (this.localPlaying) {
-      this.localAudio.pause();
-    } else {
-      this.localAudio.play();
+  private async loadInitialData() {
+    const load = await this.loadingCtrl.create({ message: 'Loading music…' });
+    await load.present();
+    this.isLoading = true;
+
+    try {
+      await this.storageService.ensureInit();
+      await this.refreshLocalMusic();
+      const authOk = await firstValueFrom(this.musicService.authenticate());
+
+      if (authOk) {
+        const [cats, newRel, playlists] = await Promise.all([
+          firstValueFrom(this.musicService.getGenres()),
+          firstValueFrom(this.musicService.getNewReleases()),
+          firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
+        ]);
+        this.categories = cats.categories.items;
+        this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+        this.featuredPlaylists = playlists;
+        this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+      } else {
+        this.newReleases = [];
+        this.recommendedTracks = [];
+        const toast = await this.toastCtrl.create({
+          message: 'Could not load streaming content. Only local music is available.',
+          duration: 3000,
+          position: 'bottom',
+          color: 'warning'
+        });
+        await toast.present();
+      }
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      this.newReleases = [];
+      this.recommendedTracks = [];
+      const toast = await this.toastCtrl.create({
+        message: 'Error loading streaming content. Only local music is available.',
+        duration: 3000,
+        position: 'bottom',
+        color: 'danger'
+      });
+      await toast.present();
+    } finally {
+      this.isLoading = false;
+      load.dismiss();
     }
-    this.localPlaying = !this.localPlaying;
   }
 
-  /** Seek local audio */
-  seekLocal(pos: number) {
-    this.localAudio.currentTime = pos;
+  private async refreshLocalMusic() {
+    try {
+      this.localMusic = await this.storageService.getLocalTracks();
+      return this.localMusic;
+    } catch (error) {
+      console.error('Error refreshing local music:', error);
+      throw error;
+    }
   }
+
+  async requestAudioPermissions() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await Filesystem.requestPermissions();
+      return true;
+    } catch (e) {
+      console.error('Error requesting permissions:', e);
+      return false;
+    }
+  }
+  return true;
+}
 
  playTrack(track: Track) {
   this.hideMiniPlayer = false;
@@ -298,7 +257,7 @@ export class HomePage implements OnInit, OnDestroy {
         map((items: any[]) =>
           items
             .map((i) => i.track)
-            .filter((t) => t && t.preview_url) // Only include tracks with preview URLs
+            .filter((t) => t && t.preview_url)
             .map((t) => this.mapSpotifyTrack(t))
         ),
         catchError((err) => {
@@ -321,25 +280,19 @@ export class HomePage implements OnInit, OnDestroy {
   async selectCategory(categoryId: string) {
     console.log('Selecting category:', categoryId);
     this.selectedCategory = categoryId;
-
-    // Show loading indicator
     const loading = await this.loadingCtrl.create({
       message: 'Loading music...',
     });
     await loading.present();
 
     try {
-      // First, get playlists for this category (original behavior)
       this.featuredPlaylists = await firstValueFrom(
         this.musicService.getPlaylistsByGenre(categoryId)
       );
 
-      // NEW: Now also get tracks for this genre
       if (categoryId === 'all') {
-        // For 'all', just use recommended tracks
         this.showGenreTracks = false;
       } else {
-        // For specific genres, get tracks for that genre
         const tracks = await firstValueFrom(
           this.musicService.getTracksByGenre(categoryId)
         );
@@ -365,8 +318,6 @@ export class HomePage implements OnInit, OnDestroy {
     }
   }
 
-  // ───── SEARCH ─────
-
   toggleSearch() {
     this.searchActive = !this.searchActive;
     if (this.searchActive) {
@@ -380,15 +331,14 @@ export class HomePage implements OnInit, OnDestroy {
     this.searchQuery = '';
     this.searchResults = [];
   }
-  onSearchFocus() { /* Search focus handler */ }
-  onSearchBlur() { /* Search blur handler */ }
+  onSearchFocus() { }
+  onSearchBlur() { }
   onSearch() {
     const q = this.searchQuery.trim().toLowerCase();
     if (!q) {
       this.searchResults = [];
       return;
     }
-    // first local
     const local = this.localMusic.filter(t =>
       t.title.toLowerCase().includes(q) ||
       t.artist.toLowerCase().includes(q)
@@ -404,8 +354,6 @@ export class HomePage implements OnInit, OnDestroy {
         .subscribe(res => (this.searchResults = res));
     }
   }
-
-  // ───── HELPERS & MAPPERS ─────
 
   private mapSpotifyTrack(i: any): Track {
     return {
@@ -450,31 +398,24 @@ export class HomePage implements OnInit, OnDestroy {
     console.log('Begin refresh operation');
 
     try {
-      // Refresh local music
       await this.refreshLocalMusic();
-
-      // Attempt to refresh online content separately
       try {
         const authOk = await firstValueFrom(this.musicService.authenticate());
 
         if (authOk) {
-          // Load new releases and playlists
           const [newRel, playlists] = await Promise.all([
             firstValueFrom(this.musicService.getNewReleases()),
             firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
           ]);
 
-          // Update streaming content WITHOUT including local music
           this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
           this.featuredPlaylists = playlists;
           this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
         }
       } catch (streamingError) {
         console.error('Error refreshing streaming content:', streamingError);
-        // Keep existing streaming content, don't reset to empty arrays
       }
 
-      // Show a success toast
       const toast = await this.toastCtrl.create({
         message: 'Music library refreshed!',
         duration: 2000,
@@ -487,7 +428,6 @@ export class HomePage implements OnInit, OnDestroy {
     } catch (error) {
       console.error('Error during refresh:', error);
 
-      // Show error toast
       const toast = await this.toastCtrl.create({
         message: 'Could not refresh content. Please try again.',
         duration: 2000,
@@ -496,46 +436,36 @@ export class HomePage implements OnInit, OnDestroy {
       });
       toast.present();
     } finally {
-      // Always complete the refresher
       event.target.complete();
     }
   }
 
   onTouchStart(event: TouchEvent) {
     this.touchStartY = event.touches[0].clientY;
-    // Prevent default behavior only when needed
     event.stopPropagation();
   }
 
   onTouchMove(event: TouchEvent) {
-    // Calculate how far the user has dragged down
     const touchY = event.touches[0].clientY;
     const deltaY = touchY - this.touchStartY;
 
-    // Only allow dragging down, not up
     if (deltaY >= 0) {
       this.slideOffset = deltaY;
     } else {
       this.slideOffset = 0;
     }
 
-    // Prevent other touch interactions while dragging
     event.preventDefault();
     event.stopPropagation();
   }
 
   async onTouchEnd(event: TouchEvent) {
-    // If user has dragged enough, dismiss the player
     if (this.slideOffset > this.dismissThreshold) {
-      // Add closing class for animation
       const miniPlayer = event.currentTarget as HTMLElement;
       miniPlayer.classList.add('closing');
 
       try {
-        // Pause and reset position without clearing track info
         await this.audioService.pauseAndReset();
-
-        // Show a toast notification
         const toast = await this.toastCtrl.create({
           message: 'Playback stopped',
           duration: 1500,
@@ -544,21 +474,17 @@ export class HomePage implements OnInit, OnDestroy {
         });
         await toast.present();
 
-        // Hide mini player visually but keep track info
         setTimeout(() => {
           this.hideMiniPlayer = true;
-        }, 300); // Match this to your animation duration
+        }, 300);
 
         console.log('Playback stopped, mini player hidden until next track');
       } catch (error) {
         console.error('Error stopping playback:', error);
       }
     } else {
-      // Not enough to dismiss, reset position
       this.slideOffset = 0;
     }
-
-    // Ensure propagation is stopped
     event.stopPropagation();
   }
 }

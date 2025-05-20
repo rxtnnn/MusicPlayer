@@ -261,14 +261,11 @@
       [icon]="['fas', 'step-backward']"
       (click)="audioService.previous()"
     ></fa-icon>
-    <fa-icon
-      [icon]="(audioService.getIsPlaying() | async) ? ['fas', 'pause'] : ['fas', 'play']"
-      (click)="audioService.togglePlay()"
-    ></fa-icon>
-    <fa-icon
-      [icon]="['fas', 'step-forward']"
-      (click)="audioService.next()"
-    ></fa-icon>
+     <button class="play-button" (click)="audioService.togglePlay(); $event.stopPropagation()">
+        <fa-icon [icon]="(audioService.getIsPlaying() | async) ? ['fas','pause'] : ['fas','play']"></fa-icon>
+    </button>
+    <fa-icon [icon]="['fas', 'step-forward']"
+      (click)="audioService.next()"></fa-icon>
   </div>
   </div>
 </ion-content>

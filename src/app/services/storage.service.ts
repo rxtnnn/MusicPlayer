@@ -1,10 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Platform } from '@ionic/angular';
-import {
-  CapacitorSQLite,
-  SQLiteConnection,
-  SQLiteDBConnection
-} from '@capacitor-community/sqlite';
+import { CapacitorSQLite, SQLiteConnection,SQLiteDBConnection } from '@capacitor-community/sqlite';
 import { Track } from './audio.service';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 
@@ -18,7 +14,7 @@ export class StorageService {
     this.sqlite = new SQLiteConnection(CapacitorSQLite);
   }
 
-    async ensureInit(): Promise<void> {
+  async ensureInit(): Promise<void> {
     if (this._initPromise) return this._initPromise;
     this._initPromise = (async () => {
       await this.platform.ready();
@@ -79,9 +75,6 @@ export class StorageService {
     return this._initPromise;
   }
 
-  // ---------- Playlist CRUD ----------
-
-  /** Returns new row ID or -1 */
   async createPlaylist(name: string): Promise<number> {
     await this.ensureInit();
     const now = new Date().toISOString();
@@ -103,7 +96,6 @@ export class StorageService {
     return res.values || [];
   }
 
-  // ---------- Playlist ↔ Track ----------
 
   async addTrackToPlaylist(
     playlistId: number,
@@ -159,7 +151,6 @@ export class StorageService {
   async getLocalTracks(): Promise<Track[]> {
     await this.ensureInit();
 
-    // Join with downloaded_music to get file_path as well
     const res = await this.db.query(`
       SELECT
         t.id,
