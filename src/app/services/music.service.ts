@@ -68,7 +68,7 @@ export class MusicService {
     );
   }
 
-  getHeaders(): HttpHeaders {
+  private getHeaders(): HttpHeaders {
     return new HttpHeaders({
       'Authorization': `Bearer ${this.authToken}`
     });
@@ -86,7 +86,7 @@ export class MusicService {
     );
   }
 
-  getNewReleases(country: string = 'PH', limit: number = 20): Observable<any> {
+  getNewReleases(country: string = 'US', limit: number = 20): Observable<any> {
     return this.ensureAuthenticated().pipe(
       switchMap(() => {
         const params = new HttpParams()
@@ -107,7 +107,7 @@ export class MusicService {
     );
   }
 
-  getGenres(country: string = 'PH', limit: number = 50): Observable<any> {
+  getGenres(country: string = 'US', limit: number = 50): Observable<any> {
     return this.ensureAuthenticated().pipe(
       switchMap(() => {
         const params = new HttpParams()
@@ -128,7 +128,7 @@ export class MusicService {
     );
   }
 
-  getPlaylistsByGenre(categoryId: string, country: string = 'PH', limit: number = 20): Observable<any[]> {
+  getPlaylistsByGenre(categoryId: string,country: string = 'PH',limit: number = 20): Observable<any[]> {
     const endpoint = environment.spotify.apiEndpoint;
 
     if (categoryId === 'all') {
@@ -151,15 +151,12 @@ export class MusicService {
     const url = `${endpoint}/browse/categories/${categoryId}/playlists`;
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
-        this.http.get<any>(url, { 
-          headers: this.getHeaders(),
-          params: new HttpParams().set('country', country).set('limit', limit.toString())
-        })
+        this.http.get<any>(url, { headers: this.getHeaders() })
       ),
       map(resp => {
-        if (resp.playlists?.items) return resp.playlists.items;
+        if (resp.playlists?.items)       return resp.playlists.items;
         else if (Array.isArray(resp.items)) return resp.items;
-        else return [];
+        else                               return [];
       }),
       catchError(() => of([]))
     );
@@ -171,8 +168,7 @@ export class MusicService {
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
         this.http.get(`${environment.spotify.apiEndpoint}/playlists/${playlistId}/tracks`, {
-          headers: this.getHeaders(),
-          params: new HttpParams().set('market', 'PH')
+          headers: this.getHeaders()
         })
       ),
       tap(data => console.log('Playlist tracks received:', data)),
@@ -197,11 +193,11 @@ export class MusicService {
           this.getPlaylistTracks(playlist.id)
         );
 
-        return forkJoin(playlistObservables).pipe(
+          return forkJoin(playlistObservables).pipe(
           map((playlistTracksArrays: any[][]) => {
             const allTracks = ([] as any[]).concat(...playlistTracksArrays); // flatten
             return allTracks
-              .filter((item: any) => item.track?.preview_url) // Only include tracks with preview URLs
+              .filter((item: any) => item.track?.preview_url)
               .map((item: any) => this.mapSpotifyTrackToModel(item.track))
               .slice(0, limit);
           })
@@ -214,12 +210,44 @@ export class MusicService {
     );
   }
 
+  getAlbumTracks(albumId: string): Observable<any> {
+    console.log(`Fetching tracks for album: ${albumId}`);
+
+    return this.ensureAuthenticated().pipe(
+      switchMap(() =>
+        this.http.get(`${environment.spotify.apiEndpoint}/albums/${albumId}/tracks`, {
+          headers: this.getHeaders(),
+          params: new HttpParams().set('limit', '50')
+        })
+      ),
+      tap(data => console.log('Album tracks received:', data)),
+      catchError((error) => {
+        console.error('Error fetching album tracks:', error);
+        return of({ items: [] });
+      })
+    );
+  }
+
+  // Add this method to fetch full track details including preview URLs
+  getFullTrackDetails(trackId: string): Observable<any> {
+    return this.ensureAuthenticated().pipe(
+      switchMap(() =>
+        this.http.get(`${environment.spotify.apiEndpoint}/tracks/${trackId}`, {
+          headers: this.getHeaders()
+        })
+      ),
+      catchError((error) => {
+        console.error(`Error fetching track details for ${trackId}:`, error);
+        return of(null);
+      })
+    );
+  }
+
   searchTracks(query: string, limit: number = 20): Observable<any> {
     const params = new HttpParams()
       .set('q', query)
       .set('type', 'track')
-      .set('limit', limit.toString())
-      .set('market', 'PH');  // Add market parameter to improve preview URL availability
+      .set('limit', limit.toString());
 
     console.log(`Searching tracks with query: "${query}"`);
 
@@ -244,8 +272,7 @@ export class MusicService {
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
         this.http.get(`${environment.spotify.apiEndpoint}/tracks/${trackId}`, {
-          headers: this.getHeaders(),
-          params: new HttpParams().set('market', 'PH')  // Add market parameter
+          headers: this.getHeaders()
         })
       ),
       tap(data => console.log('Track details received:', data)),
@@ -256,72 +283,6 @@ export class MusicService {
     );
   }
 
-  // New method to get album tracks with preview URLs
-  getAlbumTracks(albumId: string): Observable<any> {
-    console.log(`Fetching tracks for album: ${albumId}`);
-
-    return this.ensureAuthenticated().pipe(
-      switchMap(() =>
-        this.http.get(`${environment.spotify.apiEndpoint}/albums/${albumId}/tracks`, {
-          headers: this.getHeaders(),
-          params: new HttpParams().set('limit', '50').set('market', 'PH')
-        })
-      ),
-      tap(data => console.log('Album tracks received:', data)),
-      catchError((error) => {
-        console.error('Error fetching album tracks:', error);
-        return of({ items: [] });
-      })
-    );
-  }
-
-  // New method to get tracks with preview URLs for an album
-  getAlbumWithPreviewUrl(albumId: string): Observable<Track[]> {
-    return this.ensureAuthenticated().pipe(
-      switchMap(() => 
-        this.http.get(`${environment.spotify.apiEndpoint}/albums/${albumId}`, {
-          headers: this.getHeaders(),
-          params: new HttpParams().set('market', 'PH')
-        })
-      ),
-      switchMap((album: any) => {
-        if (!album || !album.tracks || !album.tracks.items || album.tracks.items.length === 0) {
-          return of([]);
-        }
-        
-        // Get track IDs from album (limit to avoid large requests)
-        const trackIds = album.tracks.items
-          .slice(0, 10)
-          .map((t: any) => t.id)
-          .join(',');
-        
-        return this.http.get(
-          `${environment.spotify.apiEndpoint}/tracks`, {
-            headers: this.getHeaders(),
-            params: new HttpParams()
-              .set('ids', trackIds)
-              .set('market', 'PH')
-          }
-        ).pipe(
-          map((response: any) => {
-            if (!response || !response.tracks) return [];
-                
-            return response.tracks
-              .filter((t: any) => t.preview_url)
-              .map((t: any) => {
-                const track = this.mapSpotifyTrackToModel(t);
-                track.imageUrl = album.images?.[0]?.url || track.imageUrl;
-                return track;
-              });
-          })
-        );
-      }),
-      catchError(error => {
-        console.error(`Error getting album tracks with previews for ${albumId}:`, error);
-        return of([]);
-      })
-    );
-  }
 
   mapSpotifyTrackToModel(item: any): Track {
     return {
@@ -333,6 +294,7 @@ export class MusicService {
       album: item.album?.name || 'Unknown Album',
       duration: (item.duration_ms ?? item.duration) / 1000,
       imageUrl:
+        item.images?.[0]?.url ||
         item.album?.images?.[0]?.url ||
         'assets/default-album-art.png',
       previewUrl: item.preview_url || '',
