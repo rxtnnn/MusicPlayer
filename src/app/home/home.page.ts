@@ -1,18 +1,6 @@
-import {
-  Component,
-  OnInit,
-  OnDestroy,
-  ViewChild,
-  ElementRef,
-  NgZone
-} from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { Router } from '@angular/router';
-import {
-  ToastController,
-  LoadingController,
-  AlertController,
-  Platform
-} from '@ionic/angular';
+import { ToastController, LoadingController, AlertController } from '@ionic/angular';
 import { AudioService, Track } from '../services/audio.service';
 import { StorageService } from '../services/storage.service';
 import { MusicService } from '../services/music.service';
@@ -42,7 +30,7 @@ export class HomePage implements OnInit, OnDestroy {
   currentTrack: Track | null = null;
   isPlaying = false;
   currentTime = 0;
-//search
+  //search
   searchActive = false;
   searchQuery = '';
   searchResults: Track[] = [];
@@ -114,16 +102,39 @@ export class HomePage implements OnInit, OnDestroy {
     const input = evt.target as HTMLInputElement;
     if (!input.files?.length) return;
 
+    await this.refreshLocalMusic();
     const files = Array.from(input.files);
-    const existingFileNames = new Set(
-      this.localMusic.map(t => {
-        const pathOrTitle = t.localPath || t.title;
-        return pathOrTitle.split('/').pop()!.toLowerCase();
-      })
-    );
+    const existingFileNames = new Set();
+    this.localMusic.forEach(track => {
+      let filename = '';
+      
+      if (track.localPath) {
+        const pathParts = track.localPath.split(/[\/\\]/);
+        filename = pathParts[pathParts.length - 1];
+      } else {
+        // If no path, use title
+        filename = track.title;
+      }
+      
+      filename = filename.replace(/\.[^/.]+$/, '');
+      const normalizedName = filename.toLowerCase().trim();
+      existingFileNames.add(normalizedName);
+    });
 
-    const newFiles = files.filter(f => !existingFileNames.has(f.name.toLowerCase()));
-    const dupFiles = files.filter(f => existingFileNames.has(f.name.toLowerCase()));
+    const newFiles = [];
+    const dupFiles = [];
+
+    for (const file of files) {
+      const fileName = file.name.replace(/\.[^/.]+$/, '').toLowerCase().trim();
+      
+      if (existingFileNames.has(fileName)) {
+        dupFiles.push(file);
+      } else {
+        console.log(`New file: "${fileName}"`);
+        newFiles.push(file);
+        existingFileNames.add(fileName);
+      }
+    }
 
     if (dupFiles.length) {
       const dupToast = await this.toastCtrl.create({
@@ -139,6 +150,7 @@ export class HomePage implements OnInit, OnDestroy {
       input.value = '';
       return;
     }
+
     const loading = await this.loadingCtrl.create({ message: 'Uploading music…' });
     await loading.present();
 
@@ -153,6 +165,7 @@ export class HomePage implements OnInit, OnDestroy {
         });
         await okToast.present();
       }
+      
       await this.refreshLocalMusic();
     } catch (error) {
       console.error('Error uploading file:', error);
@@ -185,10 +198,42 @@ export class HomePage implements OnInit, OnDestroy {
           firstValueFrom(this.musicService.getNewReleases()),
           firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
         ]);
+        
         this.categories = cats.categories.items;
-        this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
         this.featuredPlaylists = playlists;
-        this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+        
+        // Process new releases to get tracks with preview URLs
+        const processedTracks: Track[] = [];
+        
+        // Take a few albums to avoid too many API calls
+        const albumsToProcess = newRel.albums.items.slice(0, 5);
+        
+        for (const album of albumsToProcess) {
+          try {
+            // Get tracks with preview URLs for this album
+            const tracksWithPreviews = await firstValueFrom(
+              this.musicService.getAlbumWithPreviewUrl(album.id)
+            );
+            
+            if (tracksWithPreviews && tracksWithPreviews.length > 0) {
+              // Take a few tracks from each album
+              processedTracks.push(...tracksWithPreviews.slice(0, 3));
+            }
+          } catch (error) {
+            console.error(`Error processing album ${album.id}:`, error);
+          }
+        }
+        
+        // If we found tracks with previews, use them
+        if (processedTracks.length > 0) {
+          console.log(`Found ${processedTracks.length} tracks with preview URLs`);
+          this.newReleases = processedTracks;
+          this.recommendedTracks = [...processedTracks];
+        } else {
+          // Fallback to albums without preview URLs (will need to be fetched on play)
+          this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+          this.recommendedTracks = [...this.newReleases];
+        }
       } else {
         this.newReleases = [];
         this.recommendedTracks = [];
@@ -228,26 +273,85 @@ export class HomePage implements OnInit, OnDestroy {
   }
 
   async requestAudioPermissions() {
-  if (Capacitor.isNativePlatform()) {
-    try {
-      await Filesystem.requestPermissions();
-      return true;
-    } catch (e) {
-      console.error('Error requesting permissions:', e);
-      return false;
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Filesystem.requestPermissions();
+        return true;
+      } catch (e) {
+        console.error('Error requesting permissions:', e);
+        return false;
+      }
     }
+    return true;
   }
-  return true;
-}
 
- playTrack(track: Track) {
-  this.hideMiniPlayer = false;
-    if (track.isLocal) {
-      this.audioService.play(track);
-    } else {
-      this.audioService.play(track);
+  async playTrack(track: Track) {
+    this.hideMiniPlayer = false;
+    
+    try {
+      // For local tracks, play directly 
+      if (track.isLocal) {
+        this.audioService.play(track);
+        this.router.navigate(['/now-playing']);
+        return;
+      }
+      
+      // For Spotify tracks, ensure preview URL exists
+      if (!track.previewUrl || track.previewUrl === '') {
+        const loading = await this.loadingCtrl.create({
+          message: 'Loading track...',
+          duration: 3000
+        });
+        await loading.present();
+        
+        try {
+          // Try to fetch the track details with preview URL
+          const fullTrack = await firstValueFrom(
+            this.musicService.getTrackById(track.spotifyId)
+          );
+          
+          if (fullTrack && fullTrack.preview_url) {
+            track.previewUrl = fullTrack.preview_url;
+            track.duration = fullTrack.duration_ms / 1000;
+            loading.dismiss();
+            this.audioService.play(track);
+            this.router.navigate(['/now-playing']);
+          } else {
+            loading.dismiss();
+            const toast = await this.toastCtrl.create({
+              message: `No preview available for "${track.title}"`,
+              duration: 2000,
+              position: 'bottom',
+              color: 'warning'
+            });
+            await toast.present();
+          }
+        } catch (error) {
+          console.error('Error fetching track preview:', error);
+          loading.dismiss();
+          const toast = await this.toastCtrl.create({
+            message: 'Unable to play this track',
+            duration: 2000,
+            position: 'bottom',
+            color: 'danger'
+          });
+          await toast.present();
+        }
+      } else {
+        // Preview URL exists, play normally
+        this.audioService.play(track);
+        this.router.navigate(['/now-playing']);
+      }
+    } catch (error) {
+      console.error('Error playing track:', error);
+      const toast = await this.toastCtrl.create({
+        message: 'Error playing track',
+        duration: 2000,
+        position: 'bottom',
+        color: 'danger'
+      });
+      await toast.present();
     }
-    this.router.navigate(['/now-playing']);
   }
 
   playPlaylist(playlistId: string) {
@@ -257,7 +361,7 @@ export class HomePage implements OnInit, OnDestroy {
         map((items: any[]) =>
           items
             .map((i) => i.track)
-            .filter((t) => t && t.preview_url)
+            .filter((t) => t && t.preview_url) // Only include tracks with preview URLs
             .map((t) => this.mapSpotifyTrack(t))
         ),
         catchError((err) => {
@@ -300,15 +404,15 @@ export class HomePage implements OnInit, OnDestroy {
         if (tracks && tracks.length > 0) {
           this.genreTracks = tracks;
           this.showGenreTracks = true;
-          console.log('Loaded ${tracks.length} tracks for genre ${categoryId}');
+          console.log(`Loaded ${tracks.length} tracks for genre ${categoryId}`);
         } else {
           this.showGenreTracks = false;
-          this.showError('No tracks found for "${categoryId}"');
+          this.showError(`No tracks found for "${categoryId}"`);
         }
       }
 
-      if (!this.featuredPlaylists.length && !this.genreTracks.length) {
-        this.showError('No content found for "${categoryId}".');
+      if (!this.featuredPlaylists.length && !this.genreTracks?.length) {
+        this.showError(`No content found for "${categoryId}".`);
       }
     } catch (error) {
       console.error('Error loading category content:', error);
@@ -327,31 +431,61 @@ export class HomePage implements OnInit, OnDestroy {
       this.searchResults = [];
     }
   }
+
+  async toggleTrack(currentTrack: Track): Promise<void> {
+    try {
+      this.audioService.cleanup();
+      const current = await firstValueFrom(this.audioService.getCurrentTrack());
+      const playing = await firstValueFrom(this.audioService.getIsPlaying());
+      if (current?.id === currentTrack.id && playing) {
+        await this.audioService.pause();
+      } else {
+        await this.audioService.play(currentTrack);
+      }
+    } catch (err) {
+      console.error('Error toggling track playback:', err);
+    }
+  }
+    
   clearSearch() {
     this.searchQuery = '';
     this.searchResults = [];
   }
+  
   onSearchFocus() { }
   onSearchBlur() { }
+  
   onSearch() {
     const q = this.searchQuery.trim().toLowerCase();
     if (!q) {
       this.searchResults = [];
       return;
     }
+    
+    // Search local music first
     const local = this.localMusic.filter(t =>
       t.title.toLowerCase().includes(q) ||
       t.artist.toLowerCase().includes(q)
     );
+    
     if (local.length) {
       this.searchResults = local;
     } else {
+      // Search Spotify
       this.musicService.searchTracks(q, 20)
         .pipe(
-          map(r => r.tracks.items.map((i: any) => this.mapSpotifyTrack(i))),
+          map(r => {
+            // Only include tracks with preview URLs
+            return r.tracks.items
+              .filter((track: any) => track.preview_url)
+              .map((track: any) => this.mapSpotifyTrack(track));
+          }),
           catchError(() => of<Track[]>([]))
         )
-        .subscribe(res => (this.searchResults = res));
+        .subscribe(res => {
+          this.searchResults = res;
+          console.log('Search results with preview URLs:', this.searchResults.length);
+        });
     }
   }
 
@@ -363,7 +497,7 @@ export class HomePage implements OnInit, OnDestroy {
       album: i.album.name,
       duration: i.duration_ms / 1000,
       imageUrl: i.album.images[0]?.url,
-      previewUrl: i.preview_url,
+      previewUrl: i.preview_url || '',
       spotifyId: i.id,
       liked: false,
       isLocal: false
@@ -378,7 +512,7 @@ export class HomePage implements OnInit, OnDestroy {
       album: a.name,
       duration: 0,
       imageUrl: a.images[0]?.url,
-      previewUrl: '',
+      previewUrl: '', // We'll fetch this separately when needed
       spotifyId: a.id,
       liked: false,
       isLocal: false
@@ -408,9 +542,34 @@ export class HomePage implements OnInit, OnDestroy {
             firstValueFrom(this.musicService.getPlaylistsByGenre(this.selectedCategory))
           ]);
 
-          this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+          // Process albums to get tracks with preview URLs
+          const processedTracks: Track[] = [];
+          const albumsToProcess = newRel.albums.items.slice(0, 3);
+          
+          for (const album of albumsToProcess) {
+            try {
+              const tracksWithPreviews = await firstValueFrom(
+                this.musicService.getAlbumWithPreviewUrl(album.id)
+              );
+              
+              if (tracksWithPreviews && tracksWithPreviews.length > 0) {
+                processedTracks.push(...tracksWithPreviews.slice(0, 3));
+              }
+            } catch (error) {
+              console.error(`Error processing album ${album.id}:`, error);
+            }
+          }
+          
+          // If we found tracks with previews, use them
+          if (processedTracks.length > 0) {
+            this.newReleases = processedTracks;
+            this.recommendedTracks = [...processedTracks];
+          } else {
+            this.newReleases = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
+            this.recommendedTracks = [...this.newReleases];
+          }
+          
           this.featuredPlaylists = playlists;
-          this.recommendedTracks = newRel.albums.items.map((a: any) => this.mapSpotifyAlbumToTrack(a));
         }
       } catch (streamingError) {
         console.error('Error refreshing streaming content:', streamingError);

@@ -191,8 +191,8 @@
       >
         <div class="album-art-container">
           <img
-            [src]="playlist.images[0]?.url || 'assets/music-bg.png'"
-            [alt]="playlist.name"
+            [src]="playlist.picture_medium || playlist.picture || 'assets/music-bg.png'"
+            [alt]="playlist.title"
             class="album-art"
           />
           <div class="play-overlay">
@@ -200,8 +200,8 @@
           </div>
         </div>
         <div class="playlist-info">
-          <h3 class="playlist-title">{{ playlist.name }}</h3>
-          <p class="playlist-description">{{ playlist.description }}</p>
+          <h3 class="playlist-title">{{ playlist.title }}</h3>
+          <p class="playlist-description">{{ playlist.description || 'Deezer Playlist' }}</p>
         </div>
       </div>
     </div>
@@ -261,7 +261,7 @@
       [icon]="['fas', 'step-backward']"
       (click)="audioService.previous()"
     ></fa-icon>
-     <button class="play-button" (click)="audioService.togglePlay(); $event.stopPropagation()">
+     <button class="play" (click)="toggleTrack(currentTrack); $event.stopPropagation()">
         <fa-icon [icon]="(audioService.getIsPlaying() | async) ? ['fas','pause'] : ['fas','play']"></fa-icon>
     </button>
     <fa-icon [icon]="['fas', 'step-forward']"

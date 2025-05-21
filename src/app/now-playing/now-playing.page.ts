@@ -29,7 +29,6 @@ export class NowPlayingPage implements OnInit, OnDestroy {
   actionButtons: any[] = [];
   @ViewChild('actionSheet') actionSheet: any;
 
-
   constructor(
     public audioService: AudioService,
     private settingsService: SettingsService,
@@ -49,49 +48,62 @@ export class NowPlayingPage implements OnInit, OnDestroy {
       );
     });
 
-   this.subs.push(
-    this.audioService.getCurrentTrack().subscribe(track => {
-      if (track !== this.currentTrack) {
+    this.subs.push(
+      this.audioService.getCurrentTrack().subscribe(track => {
+        if (track !== this.currentTrack) {
+          this.zone.run(() => {
+            this.currentTrack = track;
+            this.isLocalTrack = !!track?.isLocal;
+            
+            // Log track details for debugging
+            if (track) {
+              console.log('Now playing track:', {
+                title: track.title,
+                artist: track.artist,
+                hasPreviewUrl: !!track.previewUrl,
+                isLocal: track.isLocal
+              });
+            }
+          });
+        }
+      })
+    );
+
+    this.subs.push(
+      this.audioService.getIsPlaying().subscribe(playing => {
+        if (playing !== this.isPlaying) {
+          this.zone.run(() => {
+            this.isPlaying = playing;
+          });
+        }
+      })
+    );
+
+    this.subs.push(
+      this.audioService.getCurrentTime().subscribe(time => {
         this.zone.run(() => {
-          this.currentTrack = track;
+          this.currentTime = time;
         });
-      }
-    })
-  );
-
-  this.subs.push(
-    this.audioService.getIsPlaying().subscribe(playing => {
-      if (playing !== this.isPlaying) {
+      })
+    );
+    
+    this.subs.push(
+      this.audioService.getDuration().subscribe(duration => {
         this.zone.run(() => {
-          this.isPlaying = playing;
+          this.duration = duration;
         });
-      }
-    })
-  );
+      })
+    );
+    
+    this.subs.push(
+      this.audioService.getProgress().subscribe(progress => {
+        this.zone.run(() => {
+          this.progress = progress;
+        });
+      })
+    );
 
-  this.subs.push(
-    this.audioService.getCurrentTime().subscribe(time => {
-      this.zone.run(() => {
-        this.currentTime = time;
-      });
-    })
-  );
-   this.subs.push(
-    this.audioService.getDuration().subscribe(duration => {
-      this.zone.run(() => {
-        this.duration = duration;
-      });
-    })
-  );
-  this.subs.push(
-  this.audioService.getProgress().subscribe(progress => {
-    this.zone.run(() => {
-      this.progress = progress;
-    });
-  })
-);
-
-  setTimeout(() => {
+    setTimeout(() => {
       if (!this.currentTrack && !this.isPlaying) {
         this.checkAndPlayCurrentTrack();
       }
@@ -107,11 +119,20 @@ export class NowPlayingPage implements OnInit, OnDestroy {
     const sub = this.audioService.getCurrentTrack().subscribe(track => {
       if (track) {
         try {
+          // Verify track has a valid preview URL (for Spotify tracks)
+          if (!track.isLocal && (!track.previewUrl || track.previewUrl === '')) {
+            this.showAlert('Playback Error', 
+              'This track does not have a preview available. Please try another track.');
+            this.goBack();
+            return;
+          }
+          
           this.audioService.play(track);
         } catch (err) {
           console.error('Error playing track:', err);
           this.showAlert('Playback Error',
             'Could not play the current track. Please try selecting another track.');
+          this.goBack();
         }
       }
       sub.unsubscribe();
@@ -132,7 +153,8 @@ export class NowPlayingPage implements OnInit, OnDestroy {
         await this.audioService.resume(this.currentTime);
       }
     } catch (error) {
-      throw new Error('Error toggling play/pause: ' + error);
+      console.error('Error toggling play/pause:', error);
+      this.showAlert('Playback Error', 'Could not toggle playback. Please try again.');
     }
   }
 
@@ -153,6 +175,7 @@ export class NowPlayingPage implements OnInit, OnDestroy {
       this.isSeeking = false;
     }
   }
+  
   previous() {
     this.audioService.previous();
   }

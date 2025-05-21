@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
-import { Observable, of, from } from 'rxjs';
+import { Observable, of, from, forkJoin } from 'rxjs';
 import { catchError, map, switchMap, tap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 import { StorageService } from './storage.service';
@@ -20,9 +20,14 @@ export class MusicService {
     this.loadToken();
   }
 
-  private async loadToken() {
-    this.authToken = await this.storageService.get('spotify_token');
-    this.tokenExpiration = await this.storageService.get('spotify_token_expiration') || 0;
+  private loadToken(): Promise<void> {
+    return Promise.all([
+      this.storageService.get('spotify_token'),
+      this.storageService.get('spotify_token_expiration')
+    ]).then(([token, expiration]) => {
+      this.authToken = token;
+      this.tokenExpiration = expiration || 0;
+    });
   }
 
   private saveToken(token: string, expiresIn: number) {
@@ -63,23 +68,25 @@ export class MusicService {
     );
   }
 
-  private getHeaders(): HttpHeaders {
+  getHeaders(): HttpHeaders {
     return new HttpHeaders({
       'Authorization': `Bearer ${this.authToken}`
     });
   }
 
   private ensureAuthenticated(): Observable<boolean> {
-    if (this.isTokenValid()) {
-      console.log('Token is valid');
-      return of(true);
-    } else {
-      console.log('Token is invalid or expired, authenticating...');
-      return this.authenticate();
-    }
+    return from(this.loadToken()).pipe(
+      switchMap(() => {
+        if (this.isTokenValid()) {
+          return of(true);
+        } else {
+          return this.authenticate();
+        }
+      })
+    );
   }
 
-  getNewReleases(country: string = 'US', limit: number = 20): Observable<any> {
+  getNewReleases(country: string = 'PH', limit: number = 20): Observable<any> {
     return this.ensureAuthenticated().pipe(
       switchMap(() => {
         const params = new HttpParams()
@@ -100,7 +107,7 @@ export class MusicService {
     );
   }
 
-  getGenres(country: string = 'US', limit: number = 50): Observable<any> {
+  getGenres(country: string = 'PH', limit: number = 50): Observable<any> {
     return this.ensureAuthenticated().pipe(
       switchMap(() => {
         const params = new HttpParams()
@@ -121,7 +128,7 @@ export class MusicService {
     );
   }
 
-  getPlaylistsByGenre(categoryId: string,country: string = 'PH',limit: number = 20): Observable<any[]> {
+  getPlaylistsByGenre(categoryId: string, country: string = 'PH', limit: number = 20): Observable<any[]> {
     const endpoint = environment.spotify.apiEndpoint;
 
     if (categoryId === 'all') {
@@ -144,12 +151,15 @@ export class MusicService {
     const url = `${endpoint}/browse/categories/${categoryId}/playlists`;
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
-        this.http.get<any>(url, { headers: this.getHeaders() })
+        this.http.get<any>(url, { 
+          headers: this.getHeaders(),
+          params: new HttpParams().set('country', country).set('limit', limit.toString())
+        })
       ),
       map(resp => {
-        if (resp.playlists?.items)       return resp.playlists.items;
+        if (resp.playlists?.items) return resp.playlists.items;
         else if (Array.isArray(resp.items)) return resp.items;
-        else                               return [];
+        else return [];
       }),
       catchError(() => of([]))
     );
@@ -161,7 +171,8 @@ export class MusicService {
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
         this.http.get(`${environment.spotify.apiEndpoint}/playlists/${playlistId}/tracks`, {
-          headers: this.getHeaders()
+          headers: this.getHeaders(),
+          params: new HttpParams().set('market', 'PH')
         })
       ),
       tap(data => console.log('Playlist tracks received:', data)),
@@ -186,15 +197,12 @@ export class MusicService {
           this.getPlaylistTracks(playlist.id)
         );
 
-        return from(Promise.all(playlistObservables.map(obs =>
-          obs.toPromise()
-        ))).pipe(
-          map(playlistTracksArrays => {
-            const allTracks = playlistTracksArrays
-              .reduce((acc, current) => acc.concat(current), []);
+        return forkJoin(playlistObservables).pipe(
+          map((playlistTracksArrays: any[][]) => {
+            const allTracks = ([] as any[]).concat(...playlistTracksArrays); // flatten
             return allTracks
-              .filter((item: { track: { preview_url: any; }; }) => item.track && item.track.preview_url) // Only tracks with preview URLs
-              .map((item: { track: any; }) => this.mapSpotifyTrackToModel(item.track))
+              .filter((item: any) => item.track?.preview_url) // Only include tracks with preview URLs
+              .map((item: any) => this.mapSpotifyTrackToModel(item.track))
               .slice(0, limit);
           })
         );
@@ -210,7 +218,8 @@ export class MusicService {
     const params = new HttpParams()
       .set('q', query)
       .set('type', 'track')
-      .set('limit', limit.toString());
+      .set('limit', limit.toString())
+      .set('market', 'PH');  // Add market parameter to improve preview URL availability
 
     console.log(`Searching tracks with query: "${query}"`);
 
@@ -235,7 +244,8 @@ export class MusicService {
     return this.ensureAuthenticated().pipe(
       switchMap(() =>
         this.http.get(`${environment.spotify.apiEndpoint}/tracks/${trackId}`, {
-          headers: this.getHeaders()
+          headers: this.getHeaders(),
+          params: new HttpParams().set('market', 'PH')  // Add market parameter
         })
       ),
       tap(data => console.log('Track details received:', data)),
@@ -245,12 +255,70 @@ export class MusicService {
       })
     );
   }
-  getTrackPreviewUrl(trackId: string): Observable<string> {
-    return this.getTrackById(trackId).pipe(
-      map((track: any) => track?.preview_url || ''),
+
+  // New method to get album tracks with preview URLs
+  getAlbumTracks(albumId: string): Observable<any> {
+    console.log(`Fetching tracks for album: ${albumId}`);
+
+    return this.ensureAuthenticated().pipe(
+      switchMap(() =>
+        this.http.get(`${environment.spotify.apiEndpoint}/albums/${albumId}/tracks`, {
+          headers: this.getHeaders(),
+          params: new HttpParams().set('limit', '50').set('market', 'PH')
+        })
+      ),
+      tap(data => console.log('Album tracks received:', data)),
       catchError((error) => {
-        console.error('Error fetching track preview URL:', error);
-        return of('');
+        console.error('Error fetching album tracks:', error);
+        return of({ items: [] });
+      })
+    );
+  }
+
+  // New method to get tracks with preview URLs for an album
+  getAlbumWithPreviewUrl(albumId: string): Observable<Track[]> {
+    return this.ensureAuthenticated().pipe(
+      switchMap(() => 
+        this.http.get(`${environment.spotify.apiEndpoint}/albums/${albumId}`, {
+          headers: this.getHeaders(),
+          params: new HttpParams().set('market', 'PH')
+        })
+      ),
+      switchMap((album: any) => {
+        if (!album || !album.tracks || !album.tracks.items || album.tracks.items.length === 0) {
+          return of([]);
+        }
+        
+        // Get track IDs from album (limit to avoid large requests)
+        const trackIds = album.tracks.items
+          .slice(0, 10)
+          .map((t: any) => t.id)
+          .join(',');
+        
+        return this.http.get(
+          `${environment.spotify.apiEndpoint}/tracks`, {
+            headers: this.getHeaders(),
+            params: new HttpParams()
+              .set('ids', trackIds)
+              .set('market', 'PH')
+          }
+        ).pipe(
+          map((response: any) => {
+            if (!response || !response.tracks) return [];
+                
+            return response.tracks
+              .filter((t: any) => t.preview_url)
+              .map((t: any) => {
+                const track = this.mapSpotifyTrackToModel(t);
+                track.imageUrl = album.images?.[0]?.url || track.imageUrl;
+                return track;
+              });
+          })
+        );
+      }),
+      catchError(error => {
+        console.error(`Error getting album tracks with previews for ${albumId}:`, error);
+        return of([]);
       })
     );
   }
@@ -265,7 +333,6 @@ export class MusicService {
       album: item.album?.name || 'Unknown Album',
       duration: (item.duration_ms ?? item.duration) / 1000,
       imageUrl:
-        item.images?.[0]?.url ||
         item.album?.images?.[0]?.url ||
         'assets/default-album-art.png',
       previewUrl: item.preview_url || '',

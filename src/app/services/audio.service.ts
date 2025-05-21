@@ -162,7 +162,6 @@ export class AudioService {
         const player = this.localAudioPlayer;
 
         if (Capacitor.isNativePlatform()) {
-          console.log('Playing local track on native platform:', track.previewUrl);
           const audioSrc = Capacitor.convertFileSrc(track.previewUrl);
           player.src = audioSrc;
           player.load();
@@ -208,13 +207,18 @@ export class AudioService {
           }
         }
       } else {
+        // Check if Spotify track has a valid preview URL
+        if (!track.previewUrl || track.previewUrl.trim() === '') {
+          console.error('Missing preview URL for Spotify track:', track.title);
+          throw new Error(`No preview URL available for "${track.title}"`);
+        }
+        
         this.audioPlayer.src = track.previewUrl;
         this.audioPlayer.load();
         await this.audioPlayer.play();
         this.isPlaying$.next(true);
       }
     } catch (e) {
-      console.error('Playback failed:', e);
       this.isPlaying$.next(false);
       throw e;
     }
@@ -266,62 +270,40 @@ export class AudioService {
       }
       const activePlayer = this.getCurrentPlayer();
       if (position !== undefined && !isNaN(position)) {
-        console.log('Resuming to specific position:', position);
         activePlayer.currentTime = position;
-      }
-      // previously saved position
-      else if (this._savedPosition !== undefined && !isNaN(this._savedPosition)) {
-        console.log('Resuming to saved position:', this._savedPosition);
+      }else if (this._savedPosition !== undefined && !isNaN(this._savedPosition)) {
         activePlayer.currentTime = this._savedPosition;
       }
 
-      // Start playback
       try {
         await activePlayer.play();
         this.isPlaying$.next(true);
         this.startUpdates();
       } catch (playError) {
-        console.error('Error resuming playback:', playError);
         throw playError;
       }
     } catch (error) {
-      console.error('Error in resume:', error);
       throw error;
     }
   }
   async verifyLocalTrack(trackId: string): Promise<boolean> {
     try {
-      // Get track from database
       const track = await this.storage.getTrack(trackId);
       if (!track) {
         console.error('Track not found in database:', trackId);
         return false;
       }
 
-      console.log('Found track in database:', track);
-
-      // Check if the file exists in filesystem
       if (track.isLocal && track.previewUrl) {
         try {
           const filePath = track.previewUrl.replace('file://', '');
-          console.log('Checking if file exists at path:', filePath);
-
-          const fileInfo = await Filesystem.stat({
-            path: filePath,
-            directory: Directory.Data
-          });
-
-          console.log('File exists! Size:', fileInfo.size, 'bytes');
           return true;
         } catch (fileError) {
-          console.error('File does not exist at the stored path:', fileError);
           return false;
         }
       }
-
       return false;
     } catch (error) {
-      console.error('Error verifying track:', error);
       return false;
     }
   }
@@ -337,21 +319,17 @@ export class AudioService {
       }
 
       if (isPlaying) {
-        // Currently playing, so pause
         await this.pause();
       } else {
-        // Currently paused, so resume from saved position
         await this.resume();
       }
     } catch (error) {
-      console.error('Error in togglePlay:', error);
       this.isPlaying$.next(false);
       throw error;
     }
   }
 
   setQueue(tracks: Track[], startIndex = 0): void {
-    console.log(`Setting queue with ${tracks.length} tracks, starting at index ${startIndex}`);
     this.queue = tracks;
     this.queueIndex = startIndex;
     if (tracks.length) {
@@ -366,24 +344,20 @@ export class AudioService {
       return;
     }
     this.queueIndex = (this.queueIndex + 1) % this.queue.length;
-    console.log(`Moving to next track, new index: ${this.queueIndex}`);
     this.play(this.queue[this.queueIndex]);
   }
 
   previous(): void {
     this.cleanup();
     if (!this.queue.length) {
-      console.log('Cannot go to previous track: queue is empty');
       return;
     }
 
     const activePlayer = this.getCurrentPlayer();
     if (activePlayer.currentTime > 3) {
-      console.log('Current time > 3 seconds, restarting current track');
       activePlayer.currentTime = 0;
     } else {
       this.queueIndex = (this.queueIndex - 1 + this.queue.length) % this.queue.length;
-      console.log(`Moving to previous track, new index: ${this.queueIndex}`);
       this.play(this.queue[this.queueIndex]);
     }
   }
@@ -391,8 +365,6 @@ export class AudioService {
   seek(time: number): void {
     const activePlayer = this.getCurrentPlayer();
     activePlayer.currentTime = time;
-
-    // Update the saved position to match
     this._savedPosition = time;
   }
 
@@ -403,7 +375,6 @@ export class AudioService {
       await this.storage.addLiked(track.id);
     }
     track.liked = !track.liked;
-    console.log(`Toggled like status for ${track.title}: ${track.liked}`);
   }
 
   getCurrentTrack(): Observable<Track|null> { return this.currentTrack$.asObservable(); }
@@ -416,7 +387,6 @@ export class AudioService {
 
   async addLocalTrack(file: File): Promise<Track> {
     try {
-      // Generate unique ID
       const id = `local-${Date.now()}`;
       const fileName = file.name;
       const fileExtension = fileName.split('.').pop()?.toLowerCase() || 'mp3';
@@ -424,13 +394,9 @@ export class AudioService {
       const relativeFilePath = `music/${uniqueFileName}`;
       let fileUri = '';
 
-      // Save the actual file content
       if (this.platform.is('hybrid')) {
-        // Convert to base64
         const fileArrayBuffer = await file.arrayBuffer();
         const base64 = this.arrayBufferToBase64(fileArrayBuffer);
-
-        // Create directory if needed
         try {
           await Filesystem.mkdir({
             path: 'music',
@@ -438,10 +404,8 @@ export class AudioService {
             recursive: true
           });
         } catch (dirErr) {
-          // Directory might already exist
         }
 
-        // Save file
         const savedFile = await Filesystem.writeFile({
           path: relativeFilePath,
           data: base64,
@@ -449,13 +413,11 @@ export class AudioService {
         });
 
         fileUri = savedFile.uri;
-        console.log('File saved at:', fileUri);
+        
       } else {
-        // Web browser - create blob URL
         fileUri = URL.createObjectURL(file);
       }
 
-      // Create track object
       const track: Track = {
         id,
         title: fileName.replace(/\.[^/.]+$/, ''),
@@ -467,12 +429,9 @@ export class AudioService {
         spotifyId: '',
         liked: false,
         isLocal: true,
-        localPath: relativeFilePath // Add the relative path
+        localPath: relativeFilePath
       };
-
-      // Save to database with local path info
       await this.storage.saveLocalMusic(track, relativeFilePath);
-
       return track;
     } catch (error) {
       console.error('Error adding local track:', error);
@@ -542,7 +501,6 @@ export class AudioService {
     this.audioPlayer.currentTime = 0;
     this.localAudioPlayer.currentTime = 0;
     if (this._currentBlobUrl) {
-      console.log('Cleaning up blob URL');
       URL.revokeObjectURL(this._currentBlobUrl);
       this._currentBlobUrl = null;
     }
